@@ -31,18 +31,32 @@ void init_ram_rom(mmio_device_t *ram)
   ram->user = malloc(ram->size * sizeof(uint32_t));
 }
 
-uint32_t read_ram_rom(const mmio_device_t *ram, const uint32_t offs,  memory_access_width_t aw)
+uint32_t read_ram_rom(const mmio_device_t *ram, const uint32_t offs, const memory_access_width_t aw)
 {
-  assert(aw == WORD);
-  return ((uint32_t*)ram->user)[(offs>>2) & (ram->size-1)];
+  fprintf(stderr, "memory::read_ram_rom: %08x (%u)\n", offs, aw);
+  if(aw == WORD) {
+    assert((offs & 3) == 0);
+    return ((uint32_t*)ram->user)[(offs>>2) & (ram->size-1)];
+  } else if(aw == HALFWORD) {
+    assert((offs & 1) == 0);
+    return (uint32_t)((uint16_t*)ram->user)[(offs>>1) & ((ram->size<<1)-1)];
+  } else if(aw == BYTE) {
+    return (uint32_t)((uint8_t*)ram->user)[(offs) & ((ram->size<<2)-1)];
+  }
+  assert(0==1);
 }
 
-void write_ram_rom(mmio_device_t *ram, const uint32_t offs, const uint32_t value,  memory_access_width_t aw)
+void write_ram_rom(mmio_device_t *ram, const uint32_t offs, const uint32_t value, const memory_access_width_t aw)
 {
-  assert((offs & 3) == 0);
-  assert(aw == WORD);
-
   // TODO: Do not allow write to ROM (unless loading)
-  fprintf(stderr, "memory::write_ram_rom: %08x = %08x\n", offs, value);
-  ((uint32_t *)ram->user)[(offs>>2) & (ram->size-1)] = value;
+  fprintf(stderr, "memory::write_ram_rom: %08x = %08x (%u)\n", offs, value, aw);
+  if(aw == WORD) {
+    assert((offs & 3) == 0);
+    ((uint32_t *)ram->user)[(offs>>2) & (ram->size-1)] = value;
+  } else if(aw == HALFWORD) {
+    assert((offs & 1) == 0);
+    ((uint16_t *)ram->user)[(offs>>1) & ((ram->size<<1)-1)] = (uint16_t)(value & 0xffff);
+  } else if(aw == BYTE) {
+    ((uint8_t *)ram->user)[(offs) & ((ram->size<<2)-1)] = (uint8_t)(value & 0xff);
+  }
 }

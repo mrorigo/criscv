@@ -1,18 +1,22 @@
 CCACHE=ccache
 CC=$(CCACHE) clang
-CCOPTS=-fsanitize=address -g -Wextra -Wall -Wpedantic -Wno-gnu-binary-literal -O0
+INCLUDE=`pkg-config --cflags libelf`
+CFLAGS=-fsanitize=address -g -Wextra -Wall -Wpedantic -Wno-gnu-binary-literal -O0 ${INCLUDE}
 #CCOPTS=-ggdb -Wextra -Wall -Wpedantic -O3
-LD=gcc
+LD=clang
 LDFLAGS=-lpthread -fsanitize=address
 
 
-objects = memory.o bus.o cpu.o main.o
+objects = memory.o bus.o cpu.o elf32.o main.o
 
 main: $(objects) Makefile
 	$(LD) $(LDFLAGS) -o main $(objects)
 
 %.o: %.c %.h
-	$(CC) $(CCOPTS) -o $*.o -c $<
+	$(CC) $(CFLAGS) -o $*.o -c $<
 
 clean:
 	rm -f $(objects) main
+
+check-syntax:
+	$(CC) -fsyntax-only -Wall ${INCLUDE} ${CHK_SOURCES} || true

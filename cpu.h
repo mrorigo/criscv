@@ -42,7 +42,7 @@ static const optype_t decode_type_table[128] = {
   /*0000000 */ Unknown,
   /*0000001 */ Unknown,
   /*0000010 */ Unknown,
-  /*0000011 */ Unknown,
+  /*0000011 = LB/LH/LW */ I,
   /*0000100 */ Unknown,
   /*0000101 */ Unknown,
   /*0000110 */ Unknown,
@@ -58,7 +58,7 @@ static const optype_t decode_type_table[128] = {
   /*0010000 */ Unknown,
   /*0010001 */ Unknown,
   /*0010010 */ Unknown,
-  /*0010011 = ADDI */ I,
+  /*0010011 = ADDI/SLTI/SLTIU/XORI/ORI/ANDI/SLLI/SRLI/SRAI */ I,
   /*0010100 */ Unknown,
   /*0010101 */ Unknown,
   /*0010110 */ Unknown,
@@ -74,7 +74,7 @@ static const optype_t decode_type_table[128] = {
   /*0100000 */ Unknown,
   /*0100001 */ Unknown,
   /*0100010 */ Unknown,
-  /*0100011 */ Unknown,
+  /*0100011 = SB/SH/SW */ S,
   /*0100100 */ Unknown,
   /*0100101 */ Unknown,
   /*0100110 */ Unknown,
@@ -90,7 +90,7 @@ static const optype_t decode_type_table[128] = {
   /*0110000 */ Unknown,
   /*0110001 */ Unknown,
   /*0110010 */ Unknown,
-  /*0110011 */ Unknown,
+  /*0110011 XOR/XRL/SRA/OR/AND */ R,
   /*0110100 */ Unknown,
   /*0110101 */ Unknown,
   /*0110110 */ Unknown,
@@ -142,7 +142,7 @@ static const optype_t decode_type_table[128] = {
   /*1100100 */ Unknown,
   /*1100101 */ Unknown,
   /*1100110 */ Unknown,
-  /*1100111 = JALR */ U,
+  /*1100111 = JALR */ I,
   /*1101000 */ Unknown,
   /*1101001 */ Unknown,
   /*1101010 */ Unknown,
@@ -267,11 +267,14 @@ typedef struct __attribute((packed)) _instr_t {
   uint32_t imm20:20;
   uint32_t rs1v;
   uint32_t rs2v;
+
+  uint32_t    memOffset;
+  uint32_t    jumpTarget;
+  bool        isJump;
+
   bool        writeRd;
-  bool        writePC;
   bool        readMem;
   bool        writeMem;
-  uint32_t    memOffset;
   memory_access_width_t memAccessWidth;
 } instr_t;
 

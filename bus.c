@@ -27,8 +27,9 @@ mmio_device_t *bus_find_device(const bus_t *bus, const size_t offs)
 {
   mmio_device_t *dev = bus->mmio_devices;
   while(dev != NULL) {
+    fprintf(stderr, "bus_find_device 0x%08zx  0x%08x => 0x%08x\n", offs, dev->base_address, (dev->base_address + (dev->size)));
     if((dev->base_address <= offs) &&
-       (dev->base_address + (dev->size >> 2)) > offs) {
+       (dev->base_address + (dev->size)) > offs) {
       return dev;
     }
     dev = dev->next;
@@ -47,13 +48,13 @@ void bus_init(const bus_t *bus)
   }
 }
 
-uint32_t bus_read(const bus_t *bus, const size_t offs,  memory_access_width_t aw)
+uint32_t bus_read(const bus_t *bus, const size_t offs,  const memory_access_width_t aw)
 {
   const mmio_device_t *dev = bus_find_device(bus, offs);
   return dev->read(dev, offs, aw);
 }
 
-void bus_write(const bus_t *bus, const size_t offs, const uint32_t value, memory_access_width_t aw)
+void bus_write(const bus_t *bus, const size_t offs, const uint32_t value, const memory_access_width_t aw)
 {
   mmio_device_t *dev = bus_find_device(bus, offs);
   dev->write(dev, offs, value, aw);
