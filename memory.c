@@ -24,20 +24,24 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <sys/types.h>
 #include "memory.h"
 #include "mmio.h"
+#include <assert.h>
 
 void init_ram_rom(mmio_device_t *ram)
 {
   ram->user = malloc(ram->size * sizeof(uint32_t));
 }
 
-uint32_t read_ram_rom(const mmio_device_t *ram, const uint32_t offs)
+uint32_t read_ram_rom(const mmio_device_t *ram, const uint32_t offs,  memory_access_width_t aw)
 {
+  assert(aw == WORD);
   return ((uint32_t*)ram->user)[(offs>>2) & (ram->size-1)];
 }
 
-void write_ram_rom(mmio_device_t *ram, const uint32_t offs, const uint32_t value)
+void write_ram_rom(mmio_device_t *ram, const uint32_t offs, const uint32_t value,  memory_access_width_t aw)
 {
   assert((offs & 3) == 0);
+  assert(aw == WORD);
+
   // TODO: Do not allow write to ROM (unless loading)
   fprintf(stderr, "memory::write_ram_rom: %08x = %08x\n", offs, value);
   ((uint32_t *)ram->user)[(offs>>2) & (ram->size-1)] = value;

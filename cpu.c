@@ -43,7 +43,7 @@ RV32I_t *cpu_init(uint32_t initial_pc, bus_t *bus)
 void fetch(core_t *core)
 {
   assert(core->state == FETCH);
-  core->instruction = bus_read(core->bus, core->pc);
+  core->instruction = bus_read(core->bus, core->pc, WORD);
   fprintf(stderr, "cpu::fetch instruction=%08x\n", core->instruction);
 }
 
@@ -96,7 +96,8 @@ void decode(core_t *core)
     break;
     
   case U:
-    dec->imm20 = (i >> 12) & 0xffff;
+    dec->imm20 = (i >> 12);
+    fprintf(stderr, "decode: U imm20: %04x\n", dec->imm20);
     break;
     
   case J:
@@ -121,14 +122,18 @@ void execute(core_t *core)
   instr_t *dec = &core->decoded;
   dec->writeRd = false;
   dec->writeMem = false;
-  
+  dec->writePC = false;
+
+  // sign extended imm12 is useful below
+  const int32_t m = 1 << (12-1);
+  const int32_t se_imm12 = (dec->imm12 ^ m)-m; // sign extend
+
   switch(dec->optype) {
   case R:
     break;
 
   case I: {
     const uint32_t op = dec->opcode | (dec->funct3 << 7) | ((dec->funct7 >> 5)<<11);
-    const uint32_t se_imm12 = (uint32_t)((int32_t)((((uint16_t)dec->imm12)<<4)>>4));
     dec->writeRd = true;
     switch(op) {
     case OP_ADDI:  core->aluOut = dec->rs1v + se_imm12;                            break;
@@ -142,8 +147,29 @@ void execute(core_t *core)
     }
     break;
   }
-  case S:
+  case S: {
+    const uint32_t op = dec->opcode | (dec->funct3 << 7);
+    switch(op) {
+    case OP_SB: {
+      dec->memOffset = dec->rs1v + se_imm12;
+      dec->memAccessWidth = BYTE;
+      core->aluOut = dec->rs2v & 0xff;
+      break;
+    }
+    case OP_SH: {
+      dec->memOffset = dec->rs1v + se_imm12;
+      dec->memAccessWidth = HALFWORD;
+      core->aluOut = dec->rs2v & 0xffff;
+      break;
+    }
+    case OP_SW: {
+      dec->memOffset = dec->rs1v + se_imm12;
+      dec->memAccessWidth = WORD;
+      core->aluOut = dec->rs2v & 0xffffffff;
+      break;
+    }
     break;
+  }
   case B:
     break;
   case U:
@@ -151,6 +177,17 @@ void execute(core_t *core)
     case OP_LUI & 0x7f:
       core->aluOut = (dec->imm20 << 12);
       dec->writeRd = true;
+      break;
+    case OP_AUIPC & 0x7f: {
+      const int32_t m = 1 << (20 -1);
+      const int32_t se_imm20 = (dec->imm20 ^ m) -m;// (uint32_t)((int32_t)(dec->imm20<<12)>>12);
+      fprintf(stderr, "OP_AUIPC: se_imm20: %08x  imm12: %08x\n", se_imm20, dec->imm20);
+      core->aluOut = se_imm20 + core->pc;
+      dec->writeRd = true;
+    }
+      break;
+    default:
+      assert(false);
       break;
     }
     break;
@@ -167,6 +204,9 @@ void memory_access(core_t *core)
   instr_t *dec = &core->decoded;
   if(dec->readMem) {
     assert(false);
+  } else if(dec->writeMem) {
+    bus_write(core->bus, dec->memOffset, core->aluOut, dec->memAccessWidth);
+    assert(false);
   }
   assert(core->state == MEMORY);
 }
@@ -177,11 +217,11 @@ void writeback(core_t *core)
 {
   instr_t *dec = &core->decoded;
   assert(core->state == WRITEBACK);
-  core->pc += sizeof(uint32_t);
   if(dec->writeRd) {
     REG_W(core->decoded.rd, core->aluOut);
-    assert(false);
   }
+  
+  core->pc += sizeof(uint32_t);
 }
 
 

@@ -268,8 +268,11 @@ typedef struct __attribute((packed)) _instr_t {
   uint32_t rs1v;
   uint32_t rs2v;
   bool        writeRd;
+  bool        writePC;
   bool        readMem;
   bool        writeMem;
+  uint32_t    memOffset;
+  memory_access_width_t memAccessWidth;
 } instr_t;
 
 typedef struct __attribute((packed)) _core_t {

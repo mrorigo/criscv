@@ -3,6 +3,10 @@
 
 #include <sys/types.h>
 
+typedef enum _memory_access_width_t {
+  BYTE, HALFWORD, WORD
+} memory_access_width_t;
+
 typedef struct _mmio_device_t {
   struct _mmio_device_t *next;
 
@@ -11,8 +15,8 @@ typedef struct _mmio_device_t {
   void    *user;
 
   void     (*init )(struct _mmio_device_t *device);
-  uint32_t (*read )(const struct _mmio_device_t *device, const uint32_t offs);
-  void     (*write)(struct _mmio_device_t *device, const uint32_t offs, const uint32_t value);
+  uint32_t (*read )(const struct _mmio_device_t *device, const uint32_t offs, memory_access_width_t aw);
+  void     (*write)(struct _mmio_device_t *device, const uint32_t offs, const uint32_t value, memory_access_width_t aw);
 
 } mmio_device_t;
 

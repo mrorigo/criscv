@@ -29,7 +29,7 @@ typedef struct _bus_t {
 } bus_t;
 
 void     bus_init(const bus_t *bus);
-uint32_t bus_read(const bus_t *bus, const size_t offs);
-void     bus_write(const bus_t *bus, const size_t offs, const uint32_t value);
+uint32_t bus_read(const bus_t *bus, const size_t offs,  memory_access_width_t aw);
+void     bus_write(const bus_t *bus, const size_t offs, const uint32_t value, memory_access_width_t aw);
 
 #endif

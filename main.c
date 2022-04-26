@@ -67,6 +67,7 @@ bus_t main_bus = {
 
 static const uint32_t rom[5] = {
   UTYPE_INSTRUCTION(OP_LUI, 0xfff, 2),
+  UTYPE_INSTRUCTION(OP_AUIPC, 0xffc, 3),
   ITYPE_INSTRUCTION(OP_ADDI, -1, 0, 2),
   ITYPE_INSTRUCTION(OP_SLTI, 0,  2, 1),
   0xdeadbeef,
@@ -77,7 +78,7 @@ void load_initial_rom(bus_t *bus, const uint32_t *rom, size_t size_in_bytes)
 {
   assert(size_in_bytes < ROM_SIZE);
   for(size_t i=0; i < size_in_bytes>>2; i++) {
-    bus_write(bus, ROM_START + i*sizeof(uint32_t), rom[i]);
+    bus_write(bus, ROM_START + i*sizeof(uint32_t), rom[i], WORD);
   }
 }
 
