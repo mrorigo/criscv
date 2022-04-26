@@ -1,3 +1,24 @@
+/**
+
+Copyright 2022 orIgo <mrorigo@gmail.com>
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*/
 #ifndef __CPU_H__
 #define __CPU_H__
 
@@ -8,13 +29,13 @@
 #define NUMCORES 1
 
 typedef enum __attribute__((packed)) _optype_t {
-  Unknown,
-  R,
-  I,
-  S,
-  B,
-  U,
-  J
+  Unknown = 0,
+  R = 1,
+  I = 2,
+  S = 3,
+  B = 4,
+  U = 5,
+  J = 6
 } optype_t;
 
 static const optype_t decode_type_table[128] = {
@@ -37,7 +58,7 @@ static const optype_t decode_type_table[128] = {
   /*0010000 */ Unknown,
   /*0010001 */ Unknown,
   /*0010010 */ Unknown,
-  /*0010011 */ Unknown,
+  /*0010011 = ADDI */ I,
   /*0010100 */ Unknown,
   /*0010101 */ Unknown,
   /*0010110 */ Unknown,
@@ -49,7 +70,7 @@ static const optype_t decode_type_table[128] = {
   /*0011100 */ Unknown,
   /*0011101 */ Unknown,
   /*0011110 */ Unknown,
-  /*0011111 */ Unknown,
+  /*0011111 */ Unknown,  // 32
   /*0100000 */ Unknown,
   /*0100001 */ Unknown,
   /*0100010 */ Unknown,
@@ -149,48 +170,66 @@ static const optype_t decode_type_table[128] = {
 };
 
 // RV32I Base Instruction Set
+
+// bits  0-6:  opcode
+// bits  7-10: func3
+// bit   11: bit 5 of func7
+#define _OP(opcode, funct3, funct7) ((opcode | (funct3 << 7) | (funct7 << 11)))
+
 typedef enum __attribute((packed)) _opcode_t {
-  OP_LUI    = 0b0110111,
-  OP_AUIPC  = 0b0010111,
-  OP_JAL    = 0b0010111,
-  OP_JALR   = 0b1100111,
-  OP_BEQ    = 0b1100011,
-  OP_BNE    = 0b1100011,
-  OP_BLT    = 0b1100011,
-  OP_BGE    = 0b1100011,
-  OP_BLTU   = 0b1100011,
-  OP_BGEU   = 0b1100011,
-  OP_LB	    = 0b0000011,
-  OP_LH	    = 0b0000011,
-  OP_LW	    = 0b0000011,
-  OP_LBU    = 0b0000011,
-  OP_LHU    = 0b0000011,
-  OP_SB	    = 0b0100011,
-  OP_SH	    = 0b0100011,
-  OP_SW	    = 0b0100011,
-  OP_ADDI   = 0b0010011,
-  OP_SLTI   = 0b0010011,
-  OP_SLTIU  = 0b0010011,
-  OP_XORI   = 0b0010011,
-  OP_ORI    = 0b0010011,
-  OP_ANDI   = 0b0010011,
-  OP_SLLI   = 0b0010011,
-  OP_SRLI   = 0b0010011,
-  OP_SRAI   = 0b0010011,
-  OP_ADD    = 0b0110011,
-  OP_SUB    = 0b0110011,
-  OP_SLL    = 0b0110011,
-  OP_SLT    = 0b0110011,
-  OP_SLTU   = 0b0110011,
-  OP_XOR    = 0b0110011,
-  OP_SRL    = 0b0110011,
-  OP_SRA    = 0b0110011,
-  OP_OR	    = 0b0110011,
-  OP_AND    = 0b0110011,
-  OP_FENCE  = 0b0001111,
-  OP_ECALL  = 0b1110011,
-  OP_EBREAK = 0b1110011
+  OP_NONE = 0,
+
+    OP_LUI   = _OP(0b0110111, 0b000, 0),
+    OP_AUIPC = _OP(0b0010111, 0b000, 0),
+    OP_JAL   = _OP(0b0000010111, 0b000, 0),
+    OP_JALR  = _OP(0b0001100111, 0b000, 0),
+
+    OP_BEQ  = _OP(0b1100011, 0b000, 0),
+    OP_BNE  = _OP(0b1100011, 0b001, 0),
+    OP_BLT  = _OP(0b1100011, 0b100, 0),
+    OP_BGE  = _OP(0b1100011, 0b101, 0),
+    OP_BLTU = _OP(0b1100011, 0b110, 0),
+    OP_BGEU = _OP(0b1100011, 0b111, 0),
+
+    OP_LB  = _OP(0b0000011, 0b000, 0),
+    OP_LH  = _OP(0b0000011, 0b001, 0),
+    OP_LW  = _OP(0b0000011, 0b010, 0),
+    OP_LBU = _OP(0b0000011, 0b100, 0),
+    OP_LHU = _OP(0b0000011, 0b101, 0),
+
+    OP_SB = _OP(0b0100011, 0b000, 0),
+    OP_SH = _OP(0b0100011, 0b001, 0),
+    OP_SW = _OP(0b0100011, 0b010, 0),
+
+    OP_ADDI  = _OP(0b0010011, 0b000, 0),
+    OP_SLTI  = _OP(0b0010011, 0b010, 0),
+    OP_SLTIU = _OP(0b0010011, 0b011, 0),
+    OP_XORI  = _OP(0b0010011, 0b100, 0),
+    OP_ORI   = _OP(0b0010011, 0b110, 0),
+    OP_ANDI  = _OP(0b0010011, 0b111, 0),
+
+    OP_SLLI = _OP(0b0010011, 0b001, 0),
+    OP_SRLI = _OP(0b0010011, 0b101, 0),
+    OP_SRAI = _OP(0b0010011, 0b101, 1),
+
+    OP_ADD  = _OP(0b0110011, 0b000, 0),
+    OP_SUB  = _OP(0b0110011, 0b000, 1),
+    OP_SLL  = _OP(0b0110011, 0b001, 0),
+    OP_SLT  = _OP(0b0110011, 0b010, 0),
+    OP_SLTU = _OP(0b0110011, 0b011, 0),
+
+    OP_XOR = _OP(0b0110011, 0b100, 0),
+    OP_SRL = _OP(0b0110011, 0b101, 0),
+    OP_SRA = _OP(0b0110011, 0b101, 1),
+    OP_OR  = _OP(0b0110011, 0b110, 0),
+    OP_AND = _OP(0b0110011, 0b111, 0),
+
+    OP_FENCE = _OP(0b0001111, 0b000, 0),
+    OP_ECALL = _OP(0b1110011, 0b000, 0),
+
+    OP_EBREAK = _OP(0b1110011, 0b000, 0)
 } opcode_t;
+#undef _OP
 
 typedef enum __attribute((packed)) _cpu_state_t {
   FETCH,
@@ -199,6 +238,7 @@ typedef enum __attribute((packed)) _cpu_state_t {
   MEMORY,
   WRITEBACK
 } cpu_state_t;
+
 
 #define NUMREGS 32
 
@@ -210,35 +250,42 @@ typedef enum __attribute((packed)) _regn_t {
     X20, X21, X22, X23, X24, X25, X26, X27, X28, X29,
     X30, X31
 } regn_t;
-
+    
 
 // Passed through the pipeline of a core
 typedef struct __attribute((packed)) _instr_t {
-  optype_t  optype:2;
-  opcode_t  opcode:8;
+  optype_t optype:3;
+  opcode_t opcode:8;
   uint8_t  rs1:5;
   uint8_t  rs2:5;
-  uint8_t  rd: 5;
+  uint8_t  rd:5;
   uint8_t  funct7:7;
+  uint8_t  funct3:3;
+  uint8_t  shamt:5;
   uint8_t  imm5:5;
   uint32_t imm12:12;
   uint32_t imm20:20;
+  uint32_t rs1v;
+  uint32_t rs2v;
+  bool        writeRd;
+  bool        readMem;
+  bool        writeMem;
 } instr_t;
 
 typedef struct __attribute((packed)) _core_t {
   bus_t      *bus;
   cpu_state_t state;
-  uint8_t     id:4;
 
-  bool        halted;
+  uint64_t    cycle;
+  uint8_t     id:4;
+  bool        halted:1;
 
   uint32_t    instruction;
-  uint32_t    regs[NUMREGS];
-  uint32_t    regsNext[NUMREGS];
-  uint32_t    pc;
-  uint32_t    pcNext;
+  uint32_t    registers[NUMREGS];
+  uint32_t    pc; // pc, pcNext
 
   instr_t     decoded;
+  uint32_t    aluOut;
 } core_t;
 
 
@@ -249,4 +296,5 @@ typedef struct __attribute((packed)) _RV32I_t {
 
 RV32I_t *cpu_init(uint32_t initial_pc, bus_t *bus);
 void cpu_cycle(RV32I_t *cpu, uint8_t core_id);
+
 #endif
