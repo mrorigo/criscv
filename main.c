@@ -23,6 +23,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <stdio.h>
 #include <stdlib.h>
 #include <strings.h>
+#include <time.h>
+#include <math.h>
 #include "mmio.h"
 #include "bus.h"
 #include "memory.h"
@@ -41,17 +43,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #define STACK_TOP ((RAM_START + RAM_SIZE) - (STACK_SIZE))
 
-mmio_device_t ram_device = {
-  .next         = NULL,
-  .base_address = RAM_START,
-  .size		= RAM_SIZE,
-  .init		= init_ram_rom,
-  .read		= read_ram_rom,
-  .write	= write_ram_rom
-};
 
 mmio_device_t rom_device = {
-  .next		= &ram_device,
+  .next		= NULL,
   .base_address = ROM_START,
   .size		= ROM_SIZE,
   .init		= init_ram_rom,
@@ -59,9 +53,17 @@ mmio_device_t rom_device = {
   .write	= write_ram_rom
 };
 
+mmio_device_t ram_device = {
+  .next         = &rom_device,
+  .base_address = RAM_START,
+  .size		= RAM_SIZE,
+  .init		= init_ram_rom,
+  .read		= read_ram_rom,
+  .write	= write_ram_rom
+};
 
 bus_t main_bus = {
-  .mmio_devices = &rom_device
+  .mmio_devices = &ram_device // RAM first, most accessed
 };
 
 #define se_12_32(x) (((uint32_t)x << 20) >> 20)
@@ -151,11 +153,26 @@ int main(int argc, char **argv)
   fprintf(stderr, "initializing CPU\n");
   RV32I_t *cpu = cpu_init((uint32_t)ROM_START, &main_bus);
 
+  
+  struct timespec spec;
+  clock_gettime(CLOCK_REALTIME, &spec);
+  uint64_t lastc = 0;
+  uint64_t start = spec.tv_sec * 1000 + spec.tv_nsec/1.0e6;
   while(true) {
     if(cpu->cores[0].halted) {
       fprintf(stderr, "CPU:CORE0: HALT\n");
       break;
     }
     cpu_cycle(cpu, 0);
+    if(cpu->cores[0].cycle % 300000000 == 0) {
+      struct timespec spec;
+      clock_gettime(CLOCK_REALTIME, &spec);
+      uint64_t end = spec.tv_sec * 1000 + spec.tv_nsec/1.0e6;
+      float cps = (float)(cpu->cores[0].cycle-lastc) / ((float)(end-start));
+      fprintf(stderr, "cps: %dk\n", (uint32_t)floorf(cps));
+      start = end;
+      lastc = cpu->cores[0].cycle;
+
+    }
   }
 }

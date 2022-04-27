@@ -37,7 +37,7 @@ void* find_sym(const char* name, Elf32_Shdr* shdr, char* strings, const unsigned
 {
   Elf32_Sym* syms = (Elf32_Sym*)(src + shdr->sh_offset);
   for(size_t i = 0; i < shdr->sh_size / sizeof(Elf32_Sym); i += 1) {
-    fprintf(stderr, "_sym: %s\n", strings + syms[i].st_name);
+    //    fprintf(stderr, "_sym: %s\n", strings + syms[i].st_name);
     if (strcmp(name, strings + syms[i].st_name) == 0) {
       return (void *)((uint64_t)syms[i].st_value);
     }

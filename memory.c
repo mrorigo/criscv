@@ -33,7 +33,7 @@ void init_ram_rom(mmio_device_t *ram)
 
 uint32_t read_ram_rom(const mmio_device_t *ram, const uint32_t offs, const memory_access_width_t aw)
 {
-  fprintf(stderr, "memory::read_ram_rom: %08x (%u)\n", offs, aw);
+  //  fprintf(stderr, "memory::read_ram_rom: %08x (%u)\n", offs, aw);
   if(aw == WORD) {
     assert((offs & 3) == 0);
     return ((uint32_t*)ram->user)[(offs>>2) & (ram->size-1)];
@@ -49,7 +49,7 @@ uint32_t read_ram_rom(const mmio_device_t *ram, const uint32_t offs, const memor
 void write_ram_rom(mmio_device_t *ram, const uint32_t offs, const uint32_t value, const memory_access_width_t aw)
 {
   // TODO: Do not allow write to ROM (unless loading)
-  fprintf(stderr, "memory::write_ram_rom: %08x = %08x (%u)\n", offs, value, aw);
+  //  fprintf(stderr, "memory::write_ram_rom: %08x = %08x (%u)\n", offs, value, aw);
   if(aw == WORD) {
     assert((offs & 3) == 0);
     ((uint32_t *)ram->user)[(offs>>2) & (ram->size-1)] = value;

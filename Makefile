@@ -1,10 +1,12 @@
 CCACHE=ccache
 CC=$(CCACHE) clang
 INCLUDE=`pkg-config --cflags libelf`
-CFLAGS=-fsanitize=address -g -Wextra -Wall -Wpedantic -Wno-gnu-binary-literal -O0 ${INCLUDE}
+CFLAGS=-g -Wextra -Wall -Wpedantic -Wno-gnu-binary-literal -O3 ${INCLUDE}
+#-fsanitize=address
 #CCOPTS=-ggdb -Wextra -Wall -Wpedantic -O3
 LD=clang
-LDFLAGS=-lpthread -fsanitize=address
+LDFLAGS=-lpthread
+#-fsanitize=address
 
 
 objects = memory.o bus.o cpu.o elf32.o main.o
