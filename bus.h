@@ -22,14 +22,21 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #define __BUS_H__
 
 #include <sys/types.h>
+#include <pthread.h>
 #include "mmio.h"
 
 typedef struct _bus_t {
   mmio_device_t *mmio_devices;
+  pthread_mutex_t mutex;
+  pthread_cond_t  read_cond;
+  pthread_cond_t  write_cond;
+  uint32_t readers;
+  uint32_t writers;
+  uint32_t writers_waiting;
 } bus_t;
 
-void     bus_init(const bus_t *bus);
-uint32_t bus_read(const bus_t *bus, const size_t offs,  const memory_access_width_t aw);
-void     bus_write(const bus_t *bus, const size_t offs, const uint32_t value, const memory_access_width_t aw);
+void     bus_init(bus_t *bus);
+uint32_t bus_read(bus_t *bus, const size_t offs,  const memory_access_width_t aw);
+void     bus_write(bus_t *bus, const size_t offs, const uint32_t value, const memory_access_width_t aw);
 
 #endif

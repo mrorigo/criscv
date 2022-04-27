@@ -21,13 +21,75 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <pthread.h>
 #include "bus.h"
 
-mmio_device_t *bus_find_device(const bus_t *bus, const size_t offs)
+void bus_init(bus_t *bus)
 {
   mmio_device_t *dev = bus->mmio_devices;
   while(dev != NULL) {
-    //    fprintf(stderr, "bus_find_device 0x%08zx  0x%08x => 0x%08x\n", offs, dev->base_address, (dev->base_address + (dev->size)));
+    dev->init(dev);
+    dev = dev->next;
+  }
+
+  bus->readers = 0;
+  bus->writers = 0;
+  bus->writers_waiting = 0;
+
+  pthread_cond_init(&bus->read_cond, NULL);
+  pthread_cond_init(&bus->write_cond, NULL);
+  pthread_mutex_init(&bus->mutex, NULL);
+}
+
+void bus_lock_read(bus_t *bus)
+{
+  pthread_mutex_lock(&bus->mutex);
+  while(bus->writers>0) {
+    pthread_cond_wait(&bus->read_cond, &bus->mutex);
+  }
+  bus->readers++;
+  pthread_mutex_unlock(&bus->mutex);
+}
+
+void bus_lock_write(bus_t *bus)
+{
+  pthread_mutex_lock(&bus->mutex);
+  bus->writers_waiting++;
+  while(bus->readers > 0 || bus->writers > 0) {
+    fprintf(stderr, "readers: %d  writers; %d\n", bus->readers, bus->writers);
+    pthread_cond_wait(&bus->write_cond, &bus->mutex);
+  }
+  bus->writers_waiting--;
+  bus->writers++;
+  pthread_mutex_unlock(&bus->mutex);
+}
+
+void bus_unlock_read(bus_t *bus)
+{
+  pthread_mutex_unlock(&bus->mutex);
+  bus->readers--;
+  if(bus->readers == 0 && bus->writers_waiting > 0) {
+    pthread_cond_signal(&bus->write_cond);
+  }
+  pthread_mutex_unlock(&bus->mutex);
+}
+
+void bus_unlock_write(bus_t *bus)
+{
+  pthread_mutex_unlock(&bus->mutex);
+  bus->writers--;
+  if(bus->writers_waiting > 0) {
+    pthread_cond_signal(&bus->write_cond);
+  }
+  
+  pthread_cond_broadcast(&bus->read_cond);
+  pthread_mutex_unlock(&bus->mutex);
+}
+
+mmio_device_t *bus_find_device(bus_t *bus, const size_t offs)
+{
+  mmio_device_t *dev = bus->mmio_devices;
+  while(dev != NULL) {
     if((dev->base_address <= offs) &&
        (dev->base_address + (dev->size)) > offs) {
       return dev;
@@ -39,23 +101,20 @@ mmio_device_t *bus_find_device(const bus_t *bus, const size_t offs)
   return NULL;
 }
 
-void bus_init(const bus_t *bus)
-{
-  mmio_device_t *dev = bus->mmio_devices;
-  while(dev != NULL) {
-    dev->init(dev);
-    dev = dev->next;
-  }
-}
 
-uint32_t bus_read(const bus_t *bus, const size_t offs,  const memory_access_width_t aw)
+uint32_t bus_read(bus_t *bus, const size_t offs, const memory_access_width_t aw)
 {
+  bus_lock_read(bus);
   const mmio_device_t *dev = bus_find_device(bus, offs);
-  return dev->read(dev, offs, aw);
+  uint32_t r = dev->read(dev, offs, aw);
+  bus_unlock_read(bus);
+  return r;
 }
 
-void bus_write(const bus_t *bus, const size_t offs, const uint32_t value, const memory_access_width_t aw)
+void bus_write(bus_t *bus, const size_t offs, const uint32_t value, const memory_access_width_t aw)
 {
+  bus_lock_write(bus);
   mmio_device_t *dev = bus_find_device(bus, offs);
   dev->write(dev, offs, value, aw);
+  bus_unlock_write(bus);
 }
