@@ -37,9 +37,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #define ROM_START 0x10000000
 #define RAM_START 0x20000000
 
-#define STACK_SIZE 1 * 1024  // 1kb is enough for everyone
+#define STACK_SIZE (1<<12)  // 16kb is enough for everyone
 
-#define STACK_TOP (((RAM_START + RAM_SIZE) - (STACK_SIZE)) - 4)
+#define STACK_TOP ((RAM_START + RAM_SIZE) - (STACK_SIZE))
 
 mmio_device_t ram_device = {
   .next         = NULL,
@@ -73,15 +73,13 @@ bus_t main_bus = {
 #define S_INSTRUCTION(opcode, imm20, rs1, rs2)  ((opcode&0x7f)  | (rs1 << 15) | (rs2 << 20) |   (imm20&31) | ((imm20&0xfffe0) << 25))
 
 
-
 static const uint32_t rom[8] = {
     // ra=Return address == HERE
     U_INSTRUCTION(OP_LUI, (ROM_START >> 12), 1), // LUI X1, ROM_START>>12
 
     // sp=Initial stack
-    U_INSTRUCTION(OP_LUI, (STACK_TOP >> 12), 2), // LUI X2, STACK_TOP>>12
-    I_INSTRUCTION(OP_ADDI, 0x500, 2, 2), // TODO: Why not addi works!?
-    I_INSTRUCTION(OP_ADDI, 0x6fc, 2, 2),
+    U_INSTRUCTION(OP_LUI, (STACK_TOP>>12), 2), // LUI X2, STACK_TOP>>12
+    I_INSTRUCTION(OP_ADDI, 0xffc, 2, 2), // TODO: Why not addi works!?
 
     // gp=Global pointer = RAM
     U_INSTRUCTION(OP_LUI, (RAM_START >> 12), 3), // LUI X1, ROM_START>>12
@@ -140,14 +138,14 @@ int main(int argc, char **argv)
 
   uint32_t entry_point = (uint32_t)elf_load(elf, size);
 
-  fprintf(stderr, "entry point from elf file: 0x%08x, stack_top=0x%08x\n", entry_point, STACK_TOP);
+  fprintf(stderr, "entry point from elf file: 0x%08x, stack_top=0x%08x size=%d\n", entry_point, STACK_TOP, STACK_SIZE);
   assert(entry_point);
   entry_point += RAM_START-0x00010000; // riscv-toolchain uses this base addr
   load_initial_rom(&main_bus, ROM_START, rom, sizeof(rom));
   load_initial_rom(&main_bus, RAM_START, elf, size);
 
   // store entry point above stack
-  bus_write(&main_bus, STACK_TOP, entry_point, WORD);
+  bus_write(&main_bus, STACK_TOP - 4, entry_point, WORD);
 
   
   fprintf(stderr, "initializing CPU\n");

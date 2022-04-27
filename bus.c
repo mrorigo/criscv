@@ -27,7 +27,7 @@ mmio_device_t *bus_find_device(const bus_t *bus, const size_t offs)
 {
   mmio_device_t *dev = bus->mmio_devices;
   while(dev != NULL) {
-    fprintf(stderr, "bus_find_device 0x%08zx  0x%08x => 0x%08x\n", offs, dev->base_address, (dev->base_address + (dev->size)));
+    //    fprintf(stderr, "bus_find_device 0x%08zx  0x%08x => 0x%08x\n", offs, dev->base_address, (dev->base_address + (dev->size)));
     if((dev->base_address <= offs) &&
        (dev->base_address + (dev->size)) > offs) {
       return dev;

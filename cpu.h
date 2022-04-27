@@ -138,7 +138,7 @@ static const optype_t decode_type_table[128] = {
   /*1100000 */ Unknown,
   /*1100001 */ Unknown,
   /*1100010 */ Unknown,
-  /*1100011 */ Unknown,
+  /*1100011 = BEQ/BNE/BLT/BGE/BLTU/BGEU */ B,
   /*1100100 */ Unknown,
   /*1100101 */ Unknown,
   /*1100110 */ Unknown,
@@ -181,8 +181,8 @@ typedef enum __attribute((packed)) _opcode_t {
 
     OP_LUI   = _OP(0b0110111, 0b000, 0),
     OP_AUIPC = _OP(0b0010111, 0b000, 0),
-    OP_JAL   = _OP(0b0000010111, 0b000, 0),
-    OP_JALR  = _OP(0b0001100111, 0b000, 0),
+    OP_JAL   = _OP(0b1101111, 0b000, 0),
+    OP_JALR  = _OP(0b1100111, 0b000, 0),
 
     OP_BEQ  = _OP(0b1100011, 0b000, 0),
     OP_BNE  = _OP(0b1100011, 0b001, 0),

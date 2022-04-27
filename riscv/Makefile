@@ -3,7 +3,7 @@ LDFLAGS=-march=rv32i -mabi=ilp32 -nostartfiles -nostdlib
 CFLAGS=$(LDFLAGS) -O0 -nostartfiles -nostdlib
 
 all: hello
-	riscv64-unknown-elf-objdump -d hello
+	riscv64-unknown-elf-objdump -S -d -h -Mno-aliases -Mnumeric hello
 
 hello: hello.o
 	$(CC) $(LDFLAGS) -o hello hello.o
