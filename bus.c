@@ -101,11 +101,10 @@ mmio_device_t *bus_find_device(bus_t *bus, const size_t offs)
   return NULL;
 }
 
-
 uint32_t bus_read(bus_t *bus, const size_t offs, const memory_access_width_t aw)
 {
-  bus_lock_read(bus);
   const mmio_device_t *dev = bus_find_device(bus, offs);
+  bus_lock_read(bus);
   uint32_t r = dev->read(dev, offs, aw);
   bus_unlock_read(bus);
   return r;
@@ -113,8 +112,8 @@ uint32_t bus_read(bus_t *bus, const size_t offs, const memory_access_width_t aw)
 
 void bus_write(bus_t *bus, const size_t offs, const uint32_t value, const memory_access_width_t aw)
 {
-  bus_lock_write(bus);
   mmio_device_t *dev = bus_find_device(bus, offs);
+  bus_lock_write(bus);
   dev->write(dev, offs, value, aw);
   bus_unlock_write(bus);
 }
