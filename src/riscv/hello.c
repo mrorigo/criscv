@@ -30,11 +30,13 @@
 */
 int _start()
 {
+  //  __asm("csrr x5, mepc");
   int j = 13;
   for(int i=0; i < 10; i++) {
     j += i;
   }
   int k = j;
   int y = k>>3;
-  return y;
+
+  return 0;
 }

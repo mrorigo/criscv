@@ -9,7 +9,7 @@ LDFLAGS=-lpthread
 #-fsanitize=address
 
 
-objects = memory.o bus.o cpu.o elf32.o main.o
+objects = memory.o bus.o cpu.o csr.o elf32.o main.o
 
 main: $(objects) Makefile
 	$(LD) $(LDFLAGS) -o main $(objects)

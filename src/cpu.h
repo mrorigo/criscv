@@ -25,6 +25,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <sys/types.h>
 #include <stdbool.h>
 #include "bus.h"
+#include "csr.h"
 
 #define NUMCORES 1
 
@@ -35,7 +36,8 @@ typedef enum __attribute__((packed)) _optype_t {
   S = 3,
   B = 4,
   U = 5,
-  J = 6
+  J = 6,
+  C = 7    // System (CSR*)
 } optype_t;
 
 static const optype_t decode_type_table[128] = {
@@ -154,7 +156,7 @@ static const optype_t decode_type_table[128] = {
   /*1110000 */ Unknown,
   /*1110001 */ Unknown,
   /*1110010 */ Unknown,
-  /*1110011 */ Unknown,
+  /*1110011 = CSR* */ C,
   /*1110100 */ Unknown,
   /*1110101 */ Unknown,
   /*1110110 */ Unknown,
@@ -179,21 +181,21 @@ static const optype_t decode_type_table[128] = {
 typedef enum __attribute((packed)) _opcode_t {
   OP_NONE = 0,
 
-    OP_LUI   = _OP(0b0110111, 0b000, 0),
+    OP_LUI = _OP(0b0110111, 0b000, 0),
     OP_AUIPC = _OP(0b0010111, 0b000, 0),
-    OP_JAL   = _OP(0b1101111, 0b000, 0),
-    OP_JALR  = _OP(0b1100111, 0b000, 0),
+    OP_JAL = _OP(0b1101111, 0b000, 0),
+    OP_JALR = _OP(0b1100111, 0b000, 0),
 
-    OP_BEQ  = _OP(0b1100011, 0b000, 0),
-    OP_BNE  = _OP(0b1100011, 0b001, 0),
-    OP_BLT  = _OP(0b1100011, 0b100, 0),
-    OP_BGE  = _OP(0b1100011, 0b101, 0),
+    OP_BEQ = _OP(0b1100011, 0b000, 0),
+    OP_BNE = _OP(0b1100011, 0b001, 0),
+    OP_BLT = _OP(0b1100011, 0b100, 0),
+    OP_BGE = _OP(0b1100011, 0b101, 0),
     OP_BLTU = _OP(0b1100011, 0b110, 0),
     OP_BGEU = _OP(0b1100011, 0b111, 0),
 
-    OP_LB  = _OP(0b0000011, 0b000, 0),
-    OP_LH  = _OP(0b0000011, 0b001, 0),
-    OP_LW  = _OP(0b0000011, 0b010, 0),
+    OP_LB = _OP(0b0000011, 0b000, 0),
+    OP_LH = _OP(0b0000011, 0b001, 0),
+    OP_LW = _OP(0b0000011, 0b010, 0),
     OP_LBU = _OP(0b0000011, 0b100, 0),
     OP_LHU = _OP(0b0000011, 0b101, 0),
 
@@ -201,44 +203,44 @@ typedef enum __attribute((packed)) _opcode_t {
     OP_SH = _OP(0b0100011, 0b001, 0),
     OP_SW = _OP(0b0100011, 0b010, 0),
 
-    OP_ADDI  = _OP(0b0010011, 0b000, 0),
-    OP_SLTI  = _OP(0b0010011, 0b010, 0),
+    OP_ADDI = _OP(0b0010011, 0b000, 0),
+    OP_SLTI = _OP(0b0010011, 0b010, 0),
     OP_SLTIU = _OP(0b0010011, 0b011, 0),
-    OP_XORI  = _OP(0b0010011, 0b100, 0),
-    OP_ORI   = _OP(0b0010011, 0b110, 0),
-    OP_ANDI  = _OP(0b0010011, 0b111, 0),
+    OP_XORI = _OP(0b0010011, 0b100, 0),
+    OP_ORI = _OP(0b0010011, 0b110, 0),
+    OP_ANDI = _OP(0b0010011, 0b111, 0),
 
     OP_SLLI = _OP(0b0010011, 0b001, 0),
     OP_SRLI = _OP(0b0010011, 0b101, 0),
     OP_SRAI = _OP(0b0010011, 0b101, 1),
 
-    OP_ADD  = _OP(0b0110011, 0b000, 0),
-    OP_SUB  = _OP(0b0110011, 0b000, 1),
-    OP_SLL  = _OP(0b0110011, 0b001, 0),
-    OP_SLT  = _OP(0b0110011, 0b010, 0),
+    OP_ADD = _OP(0b0110011, 0b000, 0),
+    OP_SUB = _OP(0b0110011, 0b000, 1),
+    OP_SLL = _OP(0b0110011, 0b001, 0),
+    OP_SLT = _OP(0b0110011, 0b010, 0),
     OP_SLTU = _OP(0b0110011, 0b011, 0),
 
     OP_XOR = _OP(0b0110011, 0b100, 0),
     OP_SRL = _OP(0b0110011, 0b101, 0),
     OP_SRA = _OP(0b0110011, 0b101, 1),
-    OP_OR  = _OP(0b0110011, 0b110, 0),
+    OP_OR = _OP(0b0110011, 0b110, 0),
     OP_AND = _OP(0b0110011, 0b111, 0),
 
     OP_FENCE = _OP(0b0001111, 0b000, 0),
     OP_ECALL = _OP(0b1110011, 0b000, 0),
 
+
+    OP_CSRRW = _OP(0b1110011, 0b001, 0),
+    OP_CSRRS = _OP(0b1110011, 0b010, 0),
+    OP_CSRRC = _OP(0b1110011, 0b011, 0),
+
+    OP_CSRRWI = _OP(0b1110011, 0b101, 0),
+    OP_CSRRSI = _OP(0b1110011, 0b110, 0),
+    OP_CSRRCI = _OP(0b1110011, 0b111, 0),
+
     OP_EBREAK = _OP(0b1110011, 0b000, 0)
 } opcode_t;
 #undef _OP
-
-typedef enum __attribute((packed)) _cpu_state_t {
-  FETCH,
-  DECODE,
-  EXECUTE,
-  MEMORY,
-  WRITEBACK
-} cpu_state_t;
-
 
 #define NUMREGS 32
 
@@ -278,29 +280,49 @@ typedef struct __attribute((packed)) _instr_t {
   memory_access_width_t memAccessWidth;
 } instr_t;
 
-typedef struct __attribute((packed)) _core_t {
-  bus_t      *bus;
-  cpu_state_t state;
 
+typedef enum __attribute((packed)) _cpu_state_t {
+  FETCH, DECODE, EXECUTE, MEMORY, WRITEBACK, TRAP
+} core_state_t;
+
+typedef enum __attribute((packed)) _trap_state_t {
+  NONE = 0, ENTER, EXIT
+} trap_state_t;
+
+typedef struct __attribute((packed)) _core_t {
+  core_state_t state;
+  trap_state_t trap_state;
+  
   uint64_t    cycle;
-  uint8_t     id:4;
-  bool        halted:1;
 
   uint32_t    instruction;
-  uint32_t    registers[NUMREGS];
+  uint32_t    prefetch;
+  uint32_t    prefetch_pc;
+  
   uint32_t    pc; // pc, pcNext
-
-  instr_t     decoded;
   uint32_t    aluOut;
+
+  uint32_t    registers[NUMREGS];
+
+  bus_t       *bus;
+  csr_t        csr;
+
+  uint32_t    trap_pc;
+  uint32_t    trap_regs[NUMREGS];
+  
+  instr_t     decoded;
+
+  uint8_t     id:4;
+  bool        halted:1;
 } core_t;
 
 
 typedef struct __attribute((packed)) _RV32I_t {
   core_t      cores[NUMCORES];
-} RV32I_t;
+} RV32I_cpu_t;
 
 
-RV32I_t *cpu_init(uint32_t initial_pc, bus_t *bus);
-void cpu_cycle(RV32I_t *cpu, uint8_t core_id);
+RV32I_cpu_t *cpu_init(uint32_t initial_pc, bus_t *bus);
+void cpu_cycle(RV32I_cpu_t *cpu, uint8_t core_id);
 
 #endif

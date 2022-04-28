@@ -23,18 +23,20 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <stdlib.h>
 #include <assert.h>
 #include <stdbool.h>
+#include <string.h>
 
 #include "cpu.h"
 
-RV32I_t *cpu_init(uint32_t initial_pc, bus_t *bus)
+RV32I_cpu_t *cpu_init(uint32_t initial_pc, bus_t *bus)
 {
-  RV32I_t *cpu = malloc(sizeof(RV32I_t));
+  RV32I_cpu_t *cpu = malloc(sizeof(RV32I_cpu_t));
 
   core_t *core0 = &cpu->cores[0];
   core0->pc     = initial_pc;
   core0->bus    = bus;
   core0->cycle  = 0;
   core0->state  = FETCH;
+  core0->prefetch_pc = 0;
   core0->halted = false;
   for(size_t i=0; i < NUMREGS; i++) {
     core0->registers[i] = 0;
@@ -45,12 +47,16 @@ RV32I_t *cpu_init(uint32_t initial_pc, bus_t *bus)
 
 void fetch(core_t *core)
 {
-  assert(core->state == FETCH);
-  core->instruction = bus_read(core->bus, core->pc, WORD);
-  //  fprintf(stderr, "cpu::fetch pc=0x%08x instruction=%08x\n",
-  //	  core->pc, core->instruction);
+  if(core->prefetch_pc != core->pc) {
+    bus_read_multiple(core->bus, core->pc, &core->instruction, 2, WORD);
+    core->prefetch_pc = core->pc + 4;
+  } else {
+    core->instruction = core->prefetch;
+  }
 }
 
+// We allow writes to ZERO, because REG_R handles this case
+#define REG_W(x, y) (core->registers[x] = (y))
 #define REG_R(x) (x == 0 ? 0 : core->registers[x])
 
 #define bit(x, y, z) (((y >> x) & 1)<<z)
@@ -65,10 +71,9 @@ uint32_t slice32(const size_t from,
   return pos != 0 ? sliced << (pos - span) : sliced;
 }
 
-
 void decode(core_t *core)
 {
-  assert(core->state == DECODE);
+  //  assert(core->state == DECODE);
   register uint32_t i = core->instruction;
   register instr_t *dec = &core->decoded;
 
@@ -152,7 +157,7 @@ void decode(core_t *core)
 
 void execute(core_t *core)
 {
-  assert(core->state == EXECUTE);
+  //  assert(core->state == EXECUTE);
   instr_t *dec = &core->decoded;
 
   // sign extended imm12 is useful below
@@ -259,15 +264,14 @@ void execute(core_t *core)
     const uint32_t op = dec->opcode | (dec->funct3 << 7);
     const int32_t t_imm12 = twos((uint32_t)se_imm12);
     dec->writeMem = true;
+    dec->memOffset = dec->rs1v + t_imm12;
     switch(op) {
     case OP_SB: {
-      dec->memOffset = dec->rs1v + t_imm12;
       dec->memAccessWidth = BYTE;
       core->aluOut = dec->rs2v & 0xff;
       break;
     }
     case OP_SH: {
-      dec->memOffset = dec->rs1v + t_imm12;
       dec->memAccessWidth = HALFWORD;
       core->aluOut = dec->rs2v & 0xffff;
       break;
@@ -277,7 +281,6 @@ void execute(core_t *core)
       // ^            ^     ^   ^     ^
       // imm110       rs1   f3  imm40 opcode
       //                             
-      dec->memOffset = dec->rs1v + t_imm12;
       dec->memAccessWidth = WORD;
       core->aluOut = dec->rs2v & 0xffffffff; // the word to store
       // fprintf(stderr, "OP_SW: offs=0x%08x  rs1: %d (0x%08x)  rs2: %d (0x%08x) imm12: 0x%03x se_imm12: 0x%08x  t_imm12: %d\n", dec->memOffset, dec->rs1, dec->rs1v, dec->rs2, dec->rs2v, dec->imm12, se_imm12, t_imm12);
@@ -292,42 +295,21 @@ void execute(core_t *core)
     const uint32_t op = (dec->opcode | (dec->funct3 << 7));
     const int32_t m = 1 << (20 -1);
     const int32_t se_imm20 = (dec->imm20 ^ m) - m;
+    dec->jumpTarget = core->pc + se_imm20;
     //    fprintf(stderr, "cpu::execute: B op=0x%08x  OP_BGE: 0x%08x\n", op, OP_BGE);
     switch(op) {
-    case OP_BEQ:
-      core->aluOut = dec->rs1v == dec->rs2v ? 1 : 0;
-      dec->jumpTarget = core->pc + se_imm20;
-      dec->isJump = core->aluOut == 1;
-      break;
-    case OP_BNE:
-      core->aluOut = dec->rs1v != dec->rs2v ? 1 : 0;
-      dec->jumpTarget = core->pc + se_imm20;
-      dec->isJump = core->aluOut == 1;
-      break;
-    case OP_BLT:
-      core->aluOut = (int32_t)dec->rs1v < (int32_t)dec->rs2v ? 1 : 0;
-      dec->jumpTarget = core->pc + se_imm20;
-      dec->isJump = core->aluOut == 1;
-      break;
-    case OP_BLTU:
-      core->aluOut = dec->rs1v < dec->rs2v ? 1 : 0;
-      dec->jumpTarget = core->pc + se_imm20;
-      dec->isJump = core->aluOut == 1;
-      break;
-    case OP_BGE:
-      core->aluOut = (int32_t)dec->rs1v > (int32_t)dec->rs2v ? 1 : 0;
-      dec->jumpTarget = core->pc + se_imm20;
-      dec->isJump = core->aluOut == 1;
-      break;
-    case OP_BGEU:
-      core->aluOut = dec->rs1v > dec->rs2v ? 1 : 0;
-      dec->jumpTarget = core->pc + se_imm20;
-      dec->isJump = core->aluOut == 1;
-      break;
+    case OP_BEQ:  core->aluOut = dec->rs1v == dec->rs2v ? 1 : 0;                  break;
+    case OP_BNE:  core->aluOut = dec->rs1v != dec->rs2v ? 1 : 0;                  break;
+    case OP_BLT:  core->aluOut = (int32_t)dec->rs1v < (int32_t)dec->rs2v ? 1 : 0; break;
+    case OP_BLTU: core->aluOut = dec->rs1v < dec->rs2v ? 1 : 0;                   break;
+    case OP_BGE:  core->aluOut = (int32_t)dec->rs1v > (int32_t)dec->rs2v ? 1 : 0; break;
+    case OP_BGEU: core->aluOut = dec->rs1v > dec->rs2v ? 1 : 0;                   break;
     }
+    dec->isJump = core->aluOut == 1;
     break;
-  }
-  case U:
+  } // B
+
+  case U: {
     dec->writeRd = true;
     switch(dec->opcode) {
     case OP_LUI & 0x7f:
@@ -344,16 +326,17 @@ void execute(core_t *core)
       break;
     }
     break;
+  } // U
 
   case J: {
     const int32_t m = 1 << (20 -1);
     const int32_t se_imm20 = (dec->imm20 ^ m) - m;
     //    fprintf(stderr, "cpu::execute J opcode=0x%02x OP_JAL=0x%02x %x\n", dec->opcode, OP_JAL & 0x7f);
+    dec->isJump = true;
+    dec->writeRd = true;
     switch(dec->opcode) {
     case OP_JAL & 0x7f:
-      dec->writeRd = true;
       dec->jumpTarget = core->pc + se_imm20;
-      dec->isJump = true;
       break;
     default:
       assert(false == dec->opcode);
@@ -361,7 +344,15 @@ void execute(core_t *core)
     }
     
     break;
-  }
+  } // J
+    
+  case C: {
+    //    switch(dec->funct3) {
+    //    }
+    assert(dec->optype != C);
+    break;
+  } // C
+
   default:
     assert(false);
     break;
@@ -370,23 +361,22 @@ void execute(core_t *core)
 
 void memory_access(core_t *core)
 {
-  instr_t *dec = &core->decoded;
+  const instr_t *dec = &core->decoded;
+  //  assert(core->state == MEMORY);
   if(dec->readMem) {
-    core->aluOut = bus_read(core->bus, dec->memOffset, dec->memAccessWidth);
+    core->aluOut = bus_read_single(core->bus, dec->memOffset, dec->memAccessWidth);
     //    fprintf(stderr, "memory_access::read 0x%08x => 0x%08x\n", dec->memOffset, core->aluOut);
   } else if(dec->writeMem) {
-    bus_write(core->bus, dec->memOffset, core->aluOut, dec->memAccessWidth);
+    bus_write_single(core->bus, dec->memOffset, core->aluOut, dec->memAccessWidth);
     //    fprintf(stderr, "memory_access::write 0x%08x <= 0x%08x\n", dec->memOffset, core->aluOut);
   }
-  assert(core->state == MEMORY);
 }
 
-#define REG_W(x, y) (core->registers[x] = x == 0 ? 0 : (y))
 
 void writeback(core_t *core)
 {
-  instr_t *dec = &core->decoded;
-  assert(core->state == WRITEBACK);
+  const instr_t *dec = &core->decoded;
+  //  assert(core->state == WRITEBACK);
   if(dec->writeRd) {
     REG_W(core->decoded.rd, core->aluOut);
     //    fprintf(stderr, "writeback::writeRd X%d = 0x%08x\n", core->decoded.rd, core->aluOut);
@@ -400,18 +390,38 @@ void writeback(core_t *core)
 }
 
 
-void cpu_cycle(RV32I_t *cpu, uint8_t core_id)
+void cpu_cycle(RV32I_cpu_t *cpu, uint8_t core_id)
 {
   core_t *core = &cpu->cores[core_id];
   
   //  fprintf(stderr, "cpu_cycle %hhu %llu %hhu\n", core_id, core->cycle, core->state);
-  
+
   switch(core->state) {
-  case FETCH:     fetch(core);         core->state = DECODE;    break;
-  case DECODE:    decode(core);        core->state = EXECUTE;   break;
-  case EXECUTE:   execute(core);       core->state = MEMORY;    break;
-  case MEMORY:    memory_access(core); core->state = WRITEBACK; break;
-  case WRITEBACK: writeback(core);     core->state = FETCH;     break;
+  case TRAP:
+    switch(core->trap_state) {
+    case ENTER:
+      memcpy(core->trap_regs, core->registers, NUMREGS*sizeof(uint32_t));
+      core->trap_pc = core->pc;
+      core->trap_state = EXIT;
+      core->state = FETCH;
+      break;
+
+    case EXIT:
+      memcpy(core->registers, core->trap_regs, NUMREGS*sizeof(uint32_t));
+      core->trap_state = NONE;
+      core->pc = core->trap_pc;
+      core->state = FETCH;
+      break;
+    }
+    break;
+
+  case FETCH:     fetch(core);         core->state = DECODE;    //break;
+  case DECODE:    decode(core);        core->state = EXECUTE;   //break;
+  case EXECUTE:   execute(core);       core->state = MEMORY;    //break;
+  case MEMORY:    memory_access(core); core->state = WRITEBACK; //break;
+  case WRITEBACK: writeback(core);     core->state = FETCH;
+    core->cycle+=5;
+    break;
   }
   /*  if(core->state == FETCH) {
     fprintf(stderr, "Cycle %llu  PC=0x%08x  Registers: ", core->cycle, core->pc);
@@ -420,5 +430,4 @@ void cpu_cycle(RV32I_t *cpu, uint8_t core_id)
     }
     fprintf(stderr, "\n\n");
     }*/
-  core->cycle++;
 }

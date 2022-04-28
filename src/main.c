@@ -28,6 +28,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "mmio.h"
 #include "bus.h"
 #include "memory.h"
+#include "csr.h"
 #include "cpu.h"
 #include "elf32.h"
 
@@ -75,7 +76,7 @@ bus_t main_bus = {
 #define S_INSTRUCTION(opcode, imm20, rs1, rs2)  ((opcode&0x7f)  | (rs1 << 15) | (rs2 << 20) |   (imm20&31) | ((imm20&0xfffe0) << 25))
 
 
-static const uint32_t rom[8] = {
+static const uint32_t rom[9] = {
     // ra=Return address == HERE
     U_INSTRUCTION(OP_LUI, (ROM_START >> 12), 1), // LUI X1, ROM_START>>12
 
@@ -109,7 +110,7 @@ void load_initial_rom(bus_t *bus, const uint32_t base_addr, const uint32_t *rom,
 {
   assert(size_in_bytes < ROM_SIZE);
   for(size_t i=0; i < size_in_bytes>>2; i++) {
-    bus_write(bus, base_addr + i*sizeof(uint32_t), rom[i], WORD);
+    bus_write_single(bus, base_addr + i*sizeof(uint32_t), rom[i], WORD);
   }
 }
 
@@ -138,7 +139,7 @@ int main(int argc, char **argv)
   
   fprintf(stderr, "loading initial ROM @ %08x\n", ROM_START);
 
-  uint32_t entry_point = (uint32_t)elf_load(elf, size);
+  uint32_t entry_point = (uint32_t)(elf_load(elf, size));
 
   fprintf(stderr, "entry point from elf file: 0x%08x, stack_top=0x%08x size=%d\n", entry_point, STACK_TOP, STACK_SIZE);
   assert(entry_point);
@@ -147,11 +148,11 @@ int main(int argc, char **argv)
   load_initial_rom(&main_bus, RAM_START, elf, size);
 
   // store entry point above stack
-  bus_write(&main_bus, STACK_TOP - 4, entry_point, WORD);
+  bus_write_single(&main_bus, STACK_TOP - 4, entry_point, WORD);
 
   
   fprintf(stderr, "initializing CPU\n");
-  RV32I_t *cpu = cpu_init((uint32_t)ROM_START, &main_bus);
+  RV32I_cpu_t *cpu = cpu_init((uint32_t)ROM_START, &main_bus);
 
   
   struct timespec spec;
@@ -164,15 +165,16 @@ int main(int argc, char **argv)
       break;
     }
     cpu_cycle(cpu, 0);
-    if(cpu->cores[0].cycle % 300000000 == 0) {
+    if(cpu->cores[0].cycle % 100000000 == 0) {
       struct timespec spec;
+      uint64_t cycles = cpu->cores[0].cycle / 5;
+
       clock_gettime(CLOCK_REALTIME, &spec);
       uint64_t end = spec.tv_sec * 1000 + spec.tv_nsec/1.0e6;
-      float cps = (float)(cpu->cores[0].cycle-lastc) / ((float)(end-start));
-      fprintf(stderr, "cps: %dk\n", (uint32_t)floorf(cps));
+      float mips = (float)(cycles-lastc) / ((float)(end-start));
+      fprintf(stderr, "mip/s: %2f\n", (mips/1e3));
       start = end;
-      lastc = cpu->cores[0].cycle;
-
+      lastc = cycles;
     }
   }
 }

@@ -36,7 +36,15 @@ typedef struct _bus_t {
 } bus_t;
 
 void     bus_init(bus_t *bus);
-uint32_t bus_read(bus_t *bus, const size_t offs,  const memory_access_width_t aw);
-void     bus_write(bus_t *bus, const size_t offs, const uint32_t value, const memory_access_width_t aw);
+uint32_t bus_read_single(bus_t *bus, const size_t offs,  const memory_access_width_t aw);
+void     bus_write_single(bus_t *bus, const size_t offs, const uint32_t value, const memory_access_width_t aw);
+
+void bus_read_multiple(bus_t *bus, const size_t offs, void *dst, size_t size, const memory_access_width_t aw);
+
+void     bus_begin_write(bus_t *bus);
+void     bus_end_write(bus_t *bus);
+
+void     bus_begin_read(bus_t *bus);
+void     bus_end_read(bus_t *bus);
 
 #endif
