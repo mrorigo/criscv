@@ -18,7 +18,8 @@ void csr_init(csr_t *csr)
   // Various specific flags and settings, including global interrupt enable, and a lot of noop bits
   csr->mstatus   = 0;
   // Encodes the base trap vector address + mode (table or single handler)
-  csr->mtvec     = 0x10000004 | 1; // FIXME
+  csr->mtvec     = 0x20000000 | 0; // single trap handler, start of RAM+4
+                   
   // Interrupt enable / disable
   csr->mie       = 0x00000888;
   // Interrupt-pending

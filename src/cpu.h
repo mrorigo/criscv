@@ -24,10 +24,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include <sys/types.h>
 #include <stdbool.h>
+#include <pthread.h>
+#include "config.h"
 #include "bus.h"
 #include "csr.h"
-
-#define NUMCORES 1
 
 typedef enum __attribute__((packed)) _optype_t {
   Unknown = 0,
@@ -272,12 +272,12 @@ typedef struct __attribute((packed)) _instr_t {
 
   uint32_t    memOffset;
   uint32_t    jumpTarget;
-  bool        isJump;
 
-  bool        writeRd;
-  bool        readMem;
-  bool        writeMem;
-  memory_access_width_t memAccessWidth;
+  memory_access_width_t memAccessWidth:2;
+  bool        isJump:1;
+  bool        writeRd:1;
+  bool        readMem:1;
+  bool        writeMem:1;
 } instr_t;
 
 
@@ -291,13 +291,11 @@ typedef enum __attribute((packed)) _trap_state_t {
 
 typedef struct __attribute((packed)) _core_t {
   core_state_t state;
-  trap_state_t trap_state;
   
   uint64_t    cycle;
 
   uint32_t    instruction;
-  uint32_t    prefetch;
-  uint32_t    prefetch_pc;
+  uint32_t    prefetch[PREFETCH_SIZE-1];
   
   uint32_t    pc; // pc, pcNext
   uint32_t    aluOut;
@@ -312,17 +310,24 @@ typedef struct __attribute((packed)) _core_t {
   
   instr_t     decoded;
 
+  uint8_t    prefetch_cnt:4; // for alignment/packing purposes
   uint8_t     id:4;
   bool        halted:1;
+  trap_state_t trap_state;
 } core_t;
 
 
 typedef struct __attribute((packed)) _RV32I_t {
-  core_t      cores[NUMCORES];
+  core_t      **cores;
+  pthread_t   *core_threads;
+  bus_t       *bus;
 } RV32I_cpu_t;
 
 
-RV32I_cpu_t *cpu_init(uint32_t initial_pc, bus_t *bus);
-void cpu_cycle(RV32I_cpu_t *cpu, uint8_t core_id);
+RV32I_cpu_t *cpu_init(bus_t *bus, uint32_t num_cores);
+core_t *core_init(RV32I_cpu_t *cpu, uint32_t core_num, uint32_t initial_pc);
+void core_cycle(core_t *core);
+void core_start(RV32I_cpu_t *cpu, uint32_t core_num);
+void core_join(RV32I_cpu_t *cpu, uint32_t core_num);
 
 #endif

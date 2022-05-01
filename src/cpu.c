@@ -24,35 +24,101 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <assert.h>
 #include <stdbool.h>
 #include <string.h>
+#include <pthread.h>
 
 #include "cpu.h"
+#include "memory.h"
 
-RV32I_cpu_t *cpu_init(uint32_t initial_pc, bus_t *bus)
+RV32I_cpu_t *cpu_init(bus_t *bus, uint32_t num_cores)
 {
   RV32I_cpu_t *cpu = malloc(sizeof(RV32I_cpu_t));
+  memset(cpu, 0, sizeof(RV32I_cpu_t));
+  cpu->bus = bus;
+  cpu->cores = malloc(sizeof(core_t *) * num_cores);
+  assert(cpu->cores);
+  cpu->core_threads = malloc(sizeof(pthread_t) * num_cores);
+  assert(cpu->core_threads);
 
-  core_t *core0 = &cpu->cores[0];
-  core0->pc     = initial_pc;
-  core0->bus    = bus;
-  core0->cycle  = 0;
-  core0->state  = FETCH;
-  core0->prefetch_pc = 0;
-  core0->halted = false;
-  for(size_t i=0; i < NUMREGS; i++) {
-    core0->registers[i] = 0;
-  }
   return cpu;
 }
 
+core_t *core_init(RV32I_cpu_t *cpu, uint32_t core_num, uint32_t initial_pc)
+{
+  assert(core_num < NUMCORES);
+
+  core_t *core = cpu->cores[core_num] = (core_t *)malloc(sizeof(core_t));
+  assert(core);
+
+  core->id     = core_num;
+  core->pc     = initial_pc;
+  core->bus    = cpu->bus;
+  core->cycle  = 0;
+  core->state  = FETCH;
+  core->prefetch_cnt = 0;
+  core->halted = false;
+  for(size_t i=0; i < NUMREGS; i++) {
+    core->registers[i] = 0;
+  }
+  return core;
+}
+
+void cpu_thread(void *arg)
+{
+  core_t *core = (core_t *)arg;
+  assert(core);
+
+  struct timespec spec;
+  clock_gettime(CLOCK_REALTIME, &spec);
+  uint64_t lastc = 0;
+  uint64_t start = spec.tv_sec * 1000 + spec.tv_nsec/1.0e6;
+  while(true) {
+    core_cycle(core);
+
+    //    dump_ram_rom(core->bus->mmio_devices, 100, 100, WORD);
+
+    if(core->cycle % (uint64_t)1e8 == 0) {
+      struct timespec spec;
+      uint64_t cycles = core->cycle / 5;
+
+      clock_gettime(CLOCK_REALTIME, &spec);
+      uint64_t end = spec.tv_sec * 1000 + spec.tv_nsec/1.0e6;
+      float mips = (float)(cycles-lastc) / ((float)(end-start));
+      fprintf(stderr, "mip/s: %2f\n", (mips/1e3));
+      start = end;
+      lastc = cycles;
+    }
+  }
+}
+
+void core_start(RV32I_cpu_t *cpu, uint32_t core_num)
+{
+  pthread_create(&cpu->core_threads[core_num], NULL, cpu_thread, (void *)(cpu->cores[core_num]));
+}
+
+void core_join(RV32I_cpu_t *cpu, uint32_t core_num)
+{
+  pthread_join(cpu->core_threads[core_num], NULL);
+}
 
 void fetch(core_t *core)
 {
-  if(core->prefetch_pc != core->pc) {
-    bus_read_multiple(core->bus, core->pc, &core->instruction, 2, WORD);
-    core->prefetch_pc = core->pc + 4;
+  //  fprintf(stderr, "\ncpu::fetch pc=0x%08x, core->prefetch_cnt(%d)\n", core->pc, core->prefetch_cnt);
+
+  
+  if(core->prefetch_cnt == 0) {
+    bus_read_multiple(core->bus, core->pc, &core->instruction, PREFETCH_SIZE, WORD);
+    core->prefetch_cnt = PREFETCH_SIZE-1;
   } else {
-    core->instruction = core->prefetch;
+    core->instruction = core->prefetch[PREFETCH_SIZE-1-core->prefetch_cnt];
+    core->prefetch_cnt--;
   }
+
+  /* fprintf(stderr, "\tinstruction: 0x%08x\n", core->instruction); */
+  /* for(size_t i=0; i <PREFETCH_SIZE-1; i++) { */
+  /*   fprintf(stderr, "\tprefetch[%d]: 0x%08x %s\n", i, core->prefetch[i], */
+  /* 	    (core->prefetch_cnt == i) ? "*" : ""); */
+  /* } */
+
 }
 
 // We allow writes to ZERO, because REG_R handles this case
@@ -66,6 +132,7 @@ uint32_t slice32(const size_t from,
 		 const uint32_t value,
 		 const size_t pos)
 {
+  assert(pos != 0);
   const uint32_t span = (from-to+1);
   const uint32_t sliced = ((value >> to) & ((1 << span) -1));
   return pos != 0 ? sliced << (pos - span) : sliced;
@@ -93,8 +160,7 @@ void decode(core_t *core)
   dec->funct3 = (i>>12) & 7;
   dec->shamt = (i>>20) & 31;
   dec->rd = (i>>7) & 31;
-  //  fprintf(stderr, "cpu::decode 0x%08x: opcode=0x%02x rs1=%x rs2=%x rd=%x f3=%1x %x\n", i, dec->opcode,
-  //  	  dec->rs1, dec->rs2, dec->rd, (i & 0xf000)>>12, dec->funct3);
+  //  fprintf(stderr, "cpu::decode 0x%08x: opcode=0x%02x rs1=%x rs2=%x rd=%x f3=%1x %x\n", i, dec->opcode, dec->rs1, dec->rs2, dec->rd, (i & 0xf000)>>12, dec->funct3);
 
   dec->funct7 = 0;
     
@@ -111,43 +177,46 @@ void decode(core_t *core)
     dec->imm12 = (((i >>7) & 0b11111) | ((i >> 20) & 0xffffe0));
     break;
     
-  case B:
-    dec->imm12 = ((i & 0b1111) | ((i&1)<<11) |
-		  ((i >> 31)<<12) |
-		  ((i >> 20) & ((1<<10)-1)));
+  case B: {
+    const uint32_t imm12 = (i >> 31) & 1;
+    const uint32_t imm105 = (i >> 25) & 0b111111;
+    const uint32_t imm41 = (i >> 8) & 0xf;
+    const uint32_t imm11 = (i >> 7) & 1;
+
+    const uint32_t bimm = (imm12 << 12) | (imm105 << 5) | (imm41 << 1) | (imm11 << 11);
+
+    //imm12 is only 12 bits in struct, but we have 13 for branches, so to preserve
+    //top bit, we need to shift down once, and then account for that when
+    // calculating jumpTarget
+    dec->imm12 = bimm>>1; 
+    //    fprintf(stderr, "cpu::decode ext   =0x%08x\n", dec->imm12);
     break;
+  }
     
   case U:
-    dec->imm20 = (i >> 12);
+    dec->imm20 = (i >> 12) & 0xfffff;
     break;
 
   case J: {
-    // imm[20|10:1|11|19:12]
+    const uint32_t  imm20 = (i >> 31) & 0b1;
+    const uint32_t  imm101 = (i >> 21) & 0b1111111111;
+    const uint32_t  imm11 = (i >> 20) & 0b1;
+    const uint32_t  imm1912 = (i >> 12) & 0b11111111;
 
-    // 2  1      1 1
-    // 0  9      2 0 9 8
-    // |  |      | | | |
-    // 1  1111111111 1 11111111
-    // ^  ^
-    //
-    //       const jImm = signExtend32(21, (bit(31, i, 20) | slice32(19, 12, i, 19) | bit(20, i, 11) | slice32(30, 21, i, 10)) << 1);
-
-    const int32_t m = 1 << (21-1);
-    const uint32_t jimm = (bit(31, i, 20) | slice32(19, 12, i, 19) | bit(20, i, 11) | slice32(30, 21, i, 10)) << 1;
-    const int32_t se_imm21 = (jimm ^ m)-m; // sign extend
-    dec->imm20 = se_imm21;
-
-    /* dec->imm20   = (((i >> 19) & ((1<<12)-1)) | */
-    /* 		    ((i&1) << 11) | */
-    /* 		    (i & 0b11110) | */
-    /* 		    ((i >> 20) & ((1<<10)-1))); */
+    const int32_t imm = (imm20 << 20) | (imm101 << 1) | (imm11 << 11) | (imm1912 << 12);
+    dec->imm20 = ((imm) << 11) >> 12;
+	//fprintf(stderr, "cpu::decode J imm: 0x%08x  imm20: 0x%08x\n", imm, dec->imm20);
   }
     break;
 
   case Unknown:
-    fprintf(stderr, "cpu::decode i=0x%08x: unknown opcode=0x%08x optype=%x\n", i, dec->opcode, dec->optype);
+    fprintf(stderr, "cpu:%d:decode i=0x%08x: unknown opcode=0x%08x optype=%x, pc=0x%08x\n", core->id, i, dec->opcode, dec->optype, core->pc);
+
     // TODO: Illegal instruction trap
-    assert(dec->optype != Unknown);
+    core->state = TRAP;
+    core->trap_state = ENTER;
+
+    //    assert(dec->optype != Unknown);
     break;
   }
 
@@ -179,7 +248,14 @@ void execute(core_t *core)
     case OP_SRA:  core->aluOut = (uint32_t)((int32_t)dec->rs1v) >> (dec->rs2v&31); break;
     case OP_OR:   core->aluOut = dec->rs1v | dec->rs2v;                            break;
     case OP_AND:  core->aluOut = dec->rs1v & dec->rs2v;                            break;
-    default: assert(false); break;
+    default:
+      
+      core->state = TRAP;
+      core->csr.mcause = 1; // TODO: defined causes
+      core->trap_state = ENTER;
+
+      assert(false);
+      break;
     }
     break;
   } // R
@@ -293,10 +369,9 @@ void execute(core_t *core)
 
   case B: {
     const uint32_t op = (dec->opcode | (dec->funct3 << 7));
-    const int32_t m = 1 << (20 -1);
-    const int32_t se_imm20 = (dec->imm20 ^ m) - m;
-    dec->jumpTarget = core->pc + se_imm20;
-    //    fprintf(stderr, "cpu::execute: B op=0x%08x  OP_BGE: 0x%08x\n", op, OP_BGE);
+    const int32_t se_imm12 = (int32_t)((dec->imm12<<21)>>20);
+    dec->jumpTarget = core->pc + se_imm12;
+    //fprintf(stderr, "cpu::execute: Branch op=0x%08x, target=0x%08x (0x%08x)  se_imm12: 0x%08x\n", op, dec->jumpTarget, dec->imm12<<1, se_imm12);
     switch(op) {
     case OP_BEQ:  core->aluOut = dec->rs1v == dec->rs2v ? 1 : 0;                  break;
     case OP_BNE:  core->aluOut = dec->rs1v != dec->rs2v ? 1 : 0;                  break;
@@ -329,15 +404,19 @@ void execute(core_t *core)
   } // U
 
   case J: {
-    const int32_t m = 1 << (20 -1);
-    const int32_t se_imm20 = (dec->imm20 ^ m) - m;
+    //    const int32_t m = 1 << (20 -1);
+    //    const int32_t se_imm20 = (dec->imm20 ^ m) - m;
+    //const int32_t se_imm20 = (dec->imm20 << 11) >> 11;
     //    fprintf(stderr, "cpu::execute J opcode=0x%02x OP_JAL=0x%02x %x\n", dec->opcode, OP_JAL & 0x7f);
     dec->isJump = true;
     dec->writeRd = true;
     switch(dec->opcode) {
-    case OP_JAL & 0x7f:
-      dec->jumpTarget = core->pc + se_imm20;
+    case OP_JAL & 0x7f: {
+      const se_imm21 = (int32_t)((dec->imm20<<13)>>12);
+      dec->jumpTarget = core->pc + se_imm21;
+      //      fprintf(stderr, "cpu::execute JAL jumpTarget=0x%08x imm20:0x%08x se_imm21:0x%08x\n", dec->jumpTarget, (int32_t)(dec->imm20), se_imm21);
       break;
+    }
     default:
       assert(false == dec->opcode);
       break;
@@ -353,8 +432,13 @@ void execute(core_t *core)
     break;
   } // C
 
-  default:
-    assert(false);
+  case Unknown:
+    // TODO: Illegal instruction trap
+    core->state = TRAP;
+    core->csr.mcause = 2;
+    core->trap_state = ENTER;
+
+    //    assert(false);
     break;
   }
 }
@@ -384,50 +468,57 @@ void writeback(core_t *core)
 
   if(dec->isJump) {
     core->pc = dec->jumpTarget;
+    core->prefetch_cnt = 0; // flush prefetch cache
   } else {
     core->pc += sizeof(uint32_t);
   }
 }
 
-
-void cpu_cycle(RV32I_cpu_t *cpu, uint8_t core_id)
+void trap(core_t *core)
 {
-  core_t *core = &cpu->cores[core_id];
-  
-  //  fprintf(stderr, "cpu_cycle %hhu %llu %hhu\n", core_id, core->cycle, core->state);
-
-  switch(core->state) {
-  case TRAP:
-    switch(core->trap_state) {
-    case ENTER:
-      memcpy(core->trap_regs, core->registers, NUMREGS*sizeof(uint32_t));
-      core->trap_pc = core->pc;
-      core->trap_state = EXIT;
-      core->state = FETCH;
-      break;
-
-    case EXIT:
-      memcpy(core->registers, core->trap_regs, NUMREGS*sizeof(uint32_t));
-      core->trap_state = NONE;
-      core->pc = core->trap_pc;
-      core->state = FETCH;
-      break;
-    }
+  switch(core->trap_state) {
+  case ENTER:
+    fprintf(stderr, "cpu::cycle: TRAP @ 0x%08x\n", core->pc);
+    assert(false);
+    memcpy(core->trap_regs, core->registers, NUMREGS*sizeof(uint32_t));
+    core->prefetch_cnt = 0;  // flush prefetch cache, since pc changes
+    core->trap_pc = core->pc;
+    core->trap_state = EXIT;
+    core->pc = 0; // TODO: Trap vector not implemented
+    core->pc = core->csr.mepc = core->pc;
+    core->state = FETCH;
+    core->trap_state = EXIT;
     break;
 
-  case FETCH:     fetch(core);         core->state = DECODE;    //break;
-  case DECODE:    decode(core);        core->state = EXECUTE;   //break;
-  case EXECUTE:   execute(core);       core->state = MEMORY;    //break;
-  case MEMORY:    memory_access(core); core->state = WRITEBACK; //break;
-  case WRITEBACK: writeback(core);     core->state = FETCH;
-    core->cycle+=5;
+  case EXIT:
+    memcpy(core->registers, core->trap_regs, NUMREGS*sizeof(uint32_t));
+
+    core->pc = core->csr.mepc + 4;
+
+    core->trap_state = NONE;
+    core->state = FETCH;
+    // flush prefetch cache (might not be necessary)
+    core->prefetch_cnt = 0;
     break;
   }
-  /*  if(core->state == FETCH) {
-    fprintf(stderr, "Cycle %llu  PC=0x%08x  Registers: ", core->cycle, core->pc);
-    for(size_t i = 0; i < NUMREGS; i++) {
-      fprintf(stderr, "X%zu=%08x ", i, core->registers[i]);
-    }
-    fprintf(stderr, "\n\n");
-    }*/
 }
+
+
+#define _stage(stage, next) stage(core); \
+  core->cycle++; \
+  core->state = core->state != TRAP ? next : core->state;
+
+void core_cycle(core_t *core)
+{
+  //  fprintf(stderr, "core %d: pc=0x%08x\n", core->id, core->pc);
+
+  switch(core->state) {
+  case TRAP:      trap(core);  core->cycle++;        break;
+  case FETCH:     _stage(fetch, DECODE);             break;
+  case DECODE:    _stage(decode, EXECUTE);           break;
+  case EXECUTE:   _stage(execute, MEMORY);           break;
+  case MEMORY:    _stage(memory_access, WRITEBACK);  break;
+  case WRITEBACK: _stage(writeback, FETCH);          break;
+  }
+}
+#undef _stage
