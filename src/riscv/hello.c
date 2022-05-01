@@ -40,9 +40,10 @@ int _start()
   //  __asm("FENCE.I"); // illegal
 
   int j = 13;
+  int t = 19;
   while(1) {
     for(int i=0; i < 10; i++) {
-      j += i;
+      j += i | t;
     }
     int k = j;
     int y = k>>3;

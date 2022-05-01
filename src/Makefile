@@ -1,5 +1,5 @@
 CCACHE=ccache
-CC=$(CCACHE) clang
+CC=$(CCACHE) gcc
 INCLUDE=`pkg-config --cflags libelf`
 CFLAGS=-g -Wextra -Wall -Wpedantic -Wno-gnu-binary-literal -fomit-frame-pointer -O3 ${INCLUDE}
 #-fsanitize=address

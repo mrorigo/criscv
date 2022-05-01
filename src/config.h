@@ -1,8 +1,8 @@
 #ifndef __CONFIG_H__
 #define __CONFIG_H__
 
-#define PREFETCH_SIZE 4
-#define NUMCORES 2
+#define PREFETCH_SIZE 8
+#define NUMCORES 4
 
 #define RAM_SIZE 1024 * 1000 * 4 // 4mb
 #define ROM_SIZE 1024            // 1kb

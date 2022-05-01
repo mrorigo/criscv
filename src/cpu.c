@@ -125,19 +125,6 @@ void fetch(core_t *core)
 #define REG_W(x, y) (core->registers[x] = (y))
 #define REG_R(x) (x == 0 ? 0 : core->registers[x])
 
-#define bit(x, y, z) (((y >> x) & 1)<<z)
-
-uint32_t slice32(const size_t from,
-		 const size_t to,
-		 const uint32_t value,
-		 const size_t pos)
-{
-  assert(pos != 0);
-  const uint32_t span = (from-to+1);
-  const uint32_t sliced = ((value >> to) & ((1 << span) -1));
-  return pos != 0 ? sliced << (pos - span) : sliced;
-}
-
 void decode(core_t *core)
 {
   //  assert(core->state == DECODE);
@@ -189,7 +176,6 @@ void decode(core_t *core)
     //top bit, we need to shift down once, and then account for that when
     // calculating jumpTarget
     dec->imm12 = bimm>>1; 
-    //    fprintf(stderr, "cpu::decode ext   =0x%08x\n", dec->imm12);
     break;
   }
     
@@ -230,8 +216,6 @@ void execute(core_t *core)
   instr_t *dec = &core->decoded;
 
   // sign extended imm12 is useful below
-  const int32_t m = 1 << (12-1);
-  const int32_t se_imm12 = (dec->imm12 ^ m)-m; // sign extend
 
   switch(dec->optype) {
   case R: {
@@ -262,6 +246,7 @@ void execute(core_t *core)
 
   case I: {
     const uint32_t op = dec->opcode | (dec->funct3 << 7) | ((dec->funct7 >> 5)<<11);
+    const int32_t se_imm12 = (dec->imm12<<20)>>20; // sign extend
     dec->writeRd = true;
     // fprintf(stderr, "OPTYPE_I: rs1: %d (0x%08x)  se_imm12: 0x%08x\n", dec->rs1, dec->rs1v, se_imm12);
     switch(op) {
@@ -294,50 +279,25 @@ void execute(core_t *core)
       break;
     case OP_ADDI: {
       const int32_t t_imm12 = twos((uint32_t)se_imm12);
-      
       core->aluOut = (uint32_t)((int32_t)dec->rs1v + t_imm12);
-      // fprintf(stderr, "OP_ADDI: rs1: %d (0x%08x) t_imm12: %d  se_imm12: 0x%08x ==>  0x%08x\n", dec->rs1, dec->rs1v, t_imm12, se_imm12, core->aluOut);
       break;
     }
-    case OP_SLTI:
-      core->aluOut = (int32_t)dec->rs1v < (int32_t)se_imm12 ? 1 : 0;
-      // fprintf(stderr, "OP_SLTI: rs1: %d (0x%08x)  se_imm12: 0x%08x ==>  0x%08x\n", dec->rs1, dec->rs1v, se_imm12, core->aluOut);
-      break;
-    case OP_SLTIU:
-      core->aluOut = dec->rs1v < (uint32_t)se_imm12 ? 1 : 0;
-      // fprintf(stderr, "OP_SLTIU: rs1: %d (0x%08x)  se_imm12: 0x%08x ==>  0x%08x\n", dec->rs1, dec->rs1v, se_imm12, core->aluOut);
-      break;
-    case OP_XORI:
-      core->aluOut = dec->rs1v ^ se_imm12 ? 1 : 0;
-      // fprintf(stderr, "OP_XORI: rs1: %d (0x%08x)  se_imm12: 0x%08x ==>  0x%08x\n", dec->rs1, dec->rs1v, se_imm12, core->aluOut);
-      break;
-    case OP_ORI:
-      core->aluOut = dec->rs1v | (se_imm12&0xfff) ? 1 : 0;
-      // fprintf(stderr, "OP_ORI: rs1: %d (0x%08x)  se_imm12: 0x%08x ==>  0x%08x\n", dec->rs1, dec->rs1v, se_imm12, core->aluOut);
-      break;
-    case OP_ANDI:
-      core->aluOut = dec->rs1v & se_imm12 ? 1 : 0;
-      // fprintf(stderr, "OP_ANDI: rs1: %d (0x%08x)  se_imm12: 0x%08x ==>  0x%08x\n", dec->rs1, dec->rs1v, se_imm12, core->aluOut);
-      break;
-    case OP_SLLI:
-      core->aluOut = dec->rs1v << dec->shamt;
-      // fprintf(stderr, "OP_SLLI: rs1: %d (0x%08x)  se_imm12: 0x%08x ==>  0x%08x\n", dec->rs1, dec->rs1v, se_imm12, core->aluOut);
-      break;
-    case OP_SRLI:
-      core->aluOut = dec->rs1v >> dec->shamt;
-      // fprintf(stderr, "OP_SRLI: rs1: %d (0x%08x)  se_imm12: 0x%08x ==>  0x%08x\n", dec->rs1, dec->rs1v, se_imm12, core->aluOut);
-      break;
-    case OP_SRAI:
-      core->aluOut = ((int32_t)dec->rs1v) >> dec->shamt;
-      // fprintf(stderr, "OP_SRAI: rs1: %d (0x%08x)  se_imm12: 0x%08x ==>  0x%08x\n", dec->rs1, dec->rs1v, se_imm12, core->aluOut);
-      break;
-    default: assert(false); break;
+    case OP_SLTI:      core->aluOut = (int32_t)dec->rs1v < (int32_t)se_imm12 ? 1 : 0;   break;
+    case OP_SLTIU:     core->aluOut = dec->rs1v < (uint32_t)se_imm12 ? 1 : 0;		break;
+    case OP_XORI:      core->aluOut = dec->rs1v ^ se_imm12 ? 1 : 0;			break;
+    case OP_ORI:       core->aluOut = dec->rs1v | (se_imm12&0xfff) ? 1 : 0;		break;
+    case OP_ANDI:      core->aluOut = dec->rs1v & se_imm12 ? 1 : 0;			break;
+    case OP_SLLI:      core->aluOut = dec->rs1v << dec->shamt;				break;
+    case OP_SRLI:      core->aluOut = dec->rs1v >> dec->shamt;				break;
+    case OP_SRAI:      core->aluOut = ((int32_t)dec->rs1v) >> dec->shamt;		break;
+    default:           assert(false);							break;
     }
     break;
   }
 
   case S: {
     const uint32_t op = dec->opcode | (dec->funct3 << 7);
+    const int32_t se_imm12 = (dec->imm12<<20)>>20; // sign extend
     const int32_t t_imm12 = twos((uint32_t)se_imm12);
     dec->writeMem = true;
     dec->memOffset = dec->rs1v + t_imm12;

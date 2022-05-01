@@ -133,7 +133,7 @@ int main(int argc, char **argv)
   // store ISR entry point at RAM_START
   bus_write_single(&main_bus, RAM_START, 0x00001337, WORD);
 
-  fprintf(stderr, "initializing CPU: %d\n", sizeof(pthread_t));
+  fprintf(stderr, "initializing CPU\n");
   RV32I_cpu_t *cpu = cpu_init(&main_bus, NUMCORES);
 
   fprintf(stderr, "Initializing %d cores\n", NUMCORES);
