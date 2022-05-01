@@ -45,6 +45,7 @@ static void bus_lock_read(bus_t *bus)
 {
   pthread_mutex_lock(&bus->mutex);
   while(bus->writers>0) {
+    //    fprintf(stderr, "bus_lock_read: bus->writers = %d\n", bus->writers);
     pthread_cond_wait(&bus->read_cond, &bus->mutex);
   }
   bus->readers++;
@@ -56,7 +57,7 @@ static void bus_lock_write(bus_t *bus)
   pthread_mutex_lock(&bus->mutex);
   bus->writers_waiting++;
   while(bus->readers > 0 || bus->writers > 0) {
-    fprintf(stderr, "readers: %d  writers; %d\n", bus->readers, bus->writers);
+    //    fprintf(stderr, "bus_lock_write: readers: %d  writers; %d (%d waiting)\n", bus->readers, bus->writers, bus->writers_waiting);
     pthread_cond_wait(&bus->write_cond, &bus->mutex);
   }
   bus->writers_waiting--;
@@ -66,7 +67,8 @@ static void bus_lock_write(bus_t *bus)
 
 static void bus_unlock_read(bus_t *bus)
 {
-  pthread_mutex_unlock(&bus->mutex);
+  pthread_mutex_lock(&bus->mutex);
+  assert(bus->readers > 0);
   bus->readers--;
   if(bus->readers == 0 && bus->writers_waiting > 0) {
     pthread_cond_signal(&bus->write_cond);
@@ -76,7 +78,8 @@ static void bus_unlock_read(bus_t *bus)
 
 static void bus_unlock_write(bus_t *bus)
 {
-  pthread_mutex_unlock(&bus->mutex);
+  pthread_mutex_lock(&bus->mutex);
+  assert(bus->writers > 0);
   bus->writers--;
   if(bus->writers_waiting > 0) {
     pthread_cond_signal(&bus->write_cond);
@@ -123,8 +126,8 @@ void bus_end_read(bus_t *bus)
 
 uint32_t bus_read_single(bus_t *bus, const size_t offs, const memory_access_width_t aw)
 {
-  const mmio_device_t *dev = bus_find_device(bus, offs);
   bus_begin_read(bus);
+  const mmio_device_t *dev = bus_find_device(bus, offs);
   uint32_t r = dev->read(dev, offs, aw);
   bus_end_read(bus);
   return r;
@@ -132,15 +135,26 @@ uint32_t bus_read_single(bus_t *bus, const size_t offs, const memory_access_widt
 
 void bus_read_multiple(bus_t *bus, const size_t offs, void *dst, size_t count, const memory_access_width_t aw)
 {
-  const mmio_device_t *dev = bus_find_device(bus, offs);
-  const stepsize = aw == BYTE ? 1 : (aw == HALFWORD ? 2 : 4);
-  size_t o = offs;
   bus_begin_read(bus);
-  if(aw == BYTE) {
-    uint8_t *ptr = (uint8_t *)dst;
+  const mmio_device_t *dev = bus_find_device(bus, offs);
+  size_t o = offs;
+
+  // fast path for instruction prefetch
+  if(aw == WORD && count == 4) {
+    uint32_t *ptr = (uint32_t *)dst;
+    ptr[0] = dev->read(dev, o, aw);
+    ptr[1] = dev->read(dev, o+4, aw);
+    ptr[2] = dev->read(dev, o+8, aw);
+    ptr[3] = dev->read(dev, o+12, aw);
+    bus_end_read(bus);
+    return;
+ }
+
+  if(aw == WORD) {
+    uint32_t *ptr = (uint32_t *)dst;
     for(size_t i=0; i < count; i++) {
       ptr[i] = dev->read(dev, o, aw);
-      o += 1;
+      o += 4;
     }
   } else if(aw == HALFWORD) {
     uint16_t *ptr = (uint16_t *)dst;
@@ -148,11 +162,11 @@ void bus_read_multiple(bus_t *bus, const size_t offs, void *dst, size_t count, c
       ptr[i] = dev->read(dev, o, aw);
       o += 2;
     }
-  } else if(aw == WORD) {
-    uint32_t *ptr = (uint32_t *)dst;
+  } else  if(aw == BYTE) {
+    uint8_t *ptr = (uint8_t *)dst;
     for(size_t i=0; i < count; i++) {
       ptr[i] = dev->read(dev, o, aw);
-      o += 4;
+      o += 1;
     }
   }
   bus_end_read(bus);
@@ -160,8 +174,13 @@ void bus_read_multiple(bus_t *bus, const size_t offs, void *dst, size_t count, c
 
 void bus_write_single(bus_t *bus, const size_t offs, const uint32_t value, const memory_access_width_t aw)
 {
-  mmio_device_t *dev = bus_find_device(bus, offs);
   bus_begin_write(bus);
+  mmio_device_t *dev = bus_find_device(bus, offs);
+  if((dev->perm & WRITE) != WRITE) {
+    // TODO: Raise trap
+    assert((dev->perm & WRITE) == WRITE);
+    return;
+  }
   dev->write(dev, offs, value, aw);
   bus_end_write(bus);
 }
