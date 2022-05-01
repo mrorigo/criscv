@@ -1,3 +1,4 @@
+#include <stdio.h>
 /**
    00010074 <_start>:
    10074:	fe010113          	addi	x2,x2,-32
@@ -28,15 +29,24 @@
    100d8:	02010113          	addi	x2,x2,32
    100dc:	00008067          	jalr	x0,0(x1)
 */
+
+//struct _reent *_impure_ptr;
+
 int _start()
 {
-  //  __asm("csrr x5, mepc");
-  int j = 13;
-  for(int i=0; i < 10; i++) {
-    j += i;
-  }
-  int k = j;
-  int y = k>>3;
+  //  putc('X', stdout);
+  
+  //  __asm("csrr x5, mepc"); // get last trap address into x5
+  //  __asm("FENCE.I"); // illegal
 
-  return 0;
+  int j = 13;
+  while(1) {
+    for(int i=0; i < 10; i++) {
+      j += i;
+    }
+    int k = j;
+    int y = k>>3;
+  }
+
+  return j;
 }
