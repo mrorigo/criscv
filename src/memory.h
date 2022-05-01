@@ -27,4 +27,9 @@ void init_ram_rom(mmio_device_t *ram);
 uint32_t read_ram_rom(const mmio_device_t *ram, const uint32_t offs,  memory_access_width_t aw);
 void write_ram_rom(mmio_device_t *ram, uint32_t offs, uint32_t value,  memory_access_width_t aw);
 
+void dump_ram_rom(const mmio_device_t *ram,
+		  const uint32_t offs,
+		  const uint32_t count,
+		  const memory_access_width_t aw);
+
 #endif

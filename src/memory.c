@@ -31,12 +31,33 @@ void init_ram_rom(mmio_device_t *ram)
   ram->user = malloc(ram->size * sizeof(uint32_t));
 }
 
+void dump_ram_rom(const mmio_device_t *ram,
+		  const uint32_t offs,
+		  const uint32_t count,
+		  const memory_access_width_t aw)
+{
+  uint32_t c=0;
+  uint32_t addr = ram->base_address + offs;
+  
+  for(size_t i=offs; i < offs+count; i++) {
+    if(c == 0) {
+      fprintf(stderr, "\n0x%08x: ", addr);
+    } else {
+      uint32_t v = ((uint32_t*)ram->user)[i & (ram->size-1)];
+      fprintf(stderr, " %08x", v);
+    }
+    c = (c+1) % 8;
+    addr++;
+  }
+}
+
 uint32_t read_ram_rom(const mmio_device_t *ram, const uint32_t offs, const memory_access_width_t aw)
 {
-  //  fprintf(stderr, "memory::read_ram_rom: %08x (%u)\n", offs, aw);
   if(aw == WORD) {
     assert((offs & 3) == 0);
-    return ((uint32_t*)ram->user)[(offs>>2) & (ram->size-1)];
+    uint32_t ret = ((uint32_t*)ram->user)[(offs>>2) & (ram->size-1)];
+    //    fprintf(stderr, "memory::read_ram_rom: %08x (%u): 0x%08x\n", offs, aw, ret);
+    return ret;
   } else if(aw == HALFWORD) {
     assert((offs & 1) == 0);
     return (uint32_t)((uint16_t*)ram->user)[(offs>>1) & ((ram->size<<1)-1)];
