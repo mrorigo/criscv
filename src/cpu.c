@@ -62,6 +62,16 @@ core_t *core_init(RV32I_cpu_t *cpu, uint32_t core_num, uint32_t initial_pc)
   return core;
 }
 
+void core_dumpregs(core_t *core)
+{
+  for(size_t i = 0 ; i < NUMREGS; i++) {
+    fprintf(stderr, "X%02d: 0x%08x ", i, core->registers[i]);
+    if(i % 4 == 3) {
+      fprintf(stderr, "\n");
+    }
+  }
+}
+
 void cpu_thread(void *arg)
 {
   core_t *core = (core_t *)arg;
@@ -72,9 +82,8 @@ void cpu_thread(void *arg)
   uint64_t lastc = 0;
   uint64_t start = spec.tv_sec * 1000 + spec.tv_nsec/1.0e6;
   while(true) {
+    //core_dumpregs(core);
     core_cycle(core);
-
-    //    dump_ram_rom(core->bus->mmio_devices, 100, 100, WORD);
 
     if(core->cycle % (uint64_t)1e8 == 0) {
       struct timespec spec;
@@ -103,7 +112,6 @@ void core_join(RV32I_cpu_t *cpu, uint32_t core_num)
 void fetch(core_t *core)
 {
   //  fprintf(stderr, "\ncpu::fetch pc=0x%08x, core->prefetch_cnt(%d)\n", core->pc, core->prefetch_cnt);
-
   
   if(core->prefetch_cnt == 0) {
     bus_read_multiple(core->bus, core->pc, &core->instruction, PREFETCH_SIZE, WORD);
@@ -112,13 +120,6 @@ void fetch(core_t *core)
     core->instruction = core->prefetch[PREFETCH_SIZE-1-core->prefetch_cnt];
     core->prefetch_cnt--;
   }
-
-  /* fprintf(stderr, "\tinstruction: 0x%08x\n", core->instruction); */
-  /* for(size_t i=0; i <PREFETCH_SIZE-1; i++) { */
-  /*   fprintf(stderr, "\tprefetch[%d]: 0x%08x %s\n", i, core->prefetch[i], */
-  /* 	    (core->prefetch_cnt == i) ? "*" : ""); */
-  /* } */
-
 }
 
 // We allow writes to ZERO, because REG_R handles this case
