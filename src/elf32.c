@@ -65,9 +65,7 @@ Elf32 *elf_load (uint8_t *elf_start, mmu_t *mmu)
 
   for(size_t i=0; i < hdr->e_shnum; ++i) {
     if(shdr[i].sh_type == SHT_PROGBITS && shdr[i].sh_addr != 0) {
-      fprintf(stderr, "_elf: shdr[i].sh_type %zu addr: 0x%08x min:0x%08x\n", shdr[i].sh_type, shdr[i].sh_addr, min_vaddr);
       min_vaddr = shdr[i].sh_addr < min_vaddr ? shdr[i].sh_addr : min_vaddr;
-      fprintf(stderr, "_elf:   min_vaddr now 0x%08x\n", min_vaddr);
       max_vaddr = shdr[i].sh_addr + shdr[i].sh_size > max_vaddr ?
 	shdr[i].sh_addr + shdr[i].sh_size : max_vaddr;
     }
