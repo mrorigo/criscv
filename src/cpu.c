@@ -65,7 +65,7 @@ core_t *core_init(RV32I_cpu_t *cpu, uint32_t core_num, uint32_t initial_pc)
 void core_dumpregs(core_t *core)
 {
   for(size_t i = 0 ; i < NUMREGS; i++) {
-    fprintf(stderr, "X%02d: 0x%08x ", i, core->registers[i]);
+    fprintf(stderr, "X%02zu: 0x%08x ", i, core->registers[i]);
     if(i % 4 == 3) {
       fprintf(stderr, "\n");
     }
@@ -192,7 +192,6 @@ void decode(core_t *core)
 
     const int32_t imm = (imm20 << 20) | (imm101 << 1) | (imm11 << 11) | (imm1912 << 12);
     dec->imm20 = ((imm) << 11) >> 12;
-	//fprintf(stderr, "cpu::decode J imm: 0x%08x  imm20: 0x%08x\n", imm, dec->imm20);
   }
     break;
 
@@ -202,8 +201,6 @@ void decode(core_t *core)
     // TODO: Illegal instruction trap
     core->state = TRAP;
     core->trap_state = ENTER;
-
-    //    assert(dec->optype != Unknown);
     break;
   }
 
@@ -213,10 +210,7 @@ void decode(core_t *core)
 
 void execute(core_t *core)
 {
-  //  assert(core->state == EXECUTE);
   instr_t *dec = &core->decoded;
-
-  // sign extended imm12 is useful below
 
   switch(dec->optype) {
   case R: {
@@ -236,7 +230,7 @@ void execute(core_t *core)
     default:
       
       core->state = TRAP;
-      core->csr.mcause = 1; // TODO: defined causes
+      core->csr.mcause = 1; // TODO: define causes
       core->trap_state = ENTER;
 
       assert(false);
@@ -249,34 +243,30 @@ void execute(core_t *core)
     const uint32_t op = dec->opcode | (dec->funct3 << 7) | ((dec->funct7 >> 5)<<11);
     const int32_t se_imm12 = (dec->imm12<<20)>>20; // sign extend
     dec->writeRd = true;
-    // fprintf(stderr, "OPTYPE_I: rs1: %d (0x%08x)  se_imm12: 0x%08x\n", dec->rs1, dec->rs1v, se_imm12);
+
     switch(op) {
     case OP_JALR:
       dec->isJump = true;
       core->aluOut = core->pc + sizeof(uint32_t);
       dec->jumpTarget = dec->rs1v + se_imm12;
-      // fprintf(stderr, "OP_JALR: target=0x%08x  rs1: %d (0x%08x)  se_imm12: 0x%08x\n", dec->jumpTarget, dec->rs1, dec->rs1v, se_imm12);
       break;
     case OP_LB:
       dec->memOffset = dec->rs1v + se_imm12;
       dec->memAccessWidth = BYTE;
       core->aluOut = dec->rs2v & 0xff;
       dec->readMem = true;
-      // fprintf(stderr, "OP_LB: offs=0x%08x  rs1: %d (0x%08x)  se_imm12: 0x%08x\n", dec->memOffset, dec->rs1, dec->rs1v, se_imm12);
       break;
     case OP_LH:
       dec->memOffset = dec->rs1v + se_imm12;
       dec->memAccessWidth = HALFWORD;
       core->aluOut = dec->rs2v & 0xffff;
       dec->readMem = true;
-      // fprintf(stderr, "OP_LH: offs=0x%08x  rs1: %d (0x%08x)  se_imm12: 0x%08x\n", dec->memOffset, dec->rs1, dec->rs1v, se_imm12);
       break;
     case OP_LW:
       dec->memOffset = dec->rs1v + se_imm12;
       dec->memAccessWidth = WORD;
       core->aluOut = dec->rs2v & 0xffffffff;
       dec->readMem = true;
-      // fprintf(stderr, "OP_LW: offs=0x%08x  rs1: %d (0x%08x)  se_imm12: 0x%08x\n", dec->memOffset, dec->rs1, dec->rs1v, se_imm12);
       break;
     case OP_ADDI: {
       const int32_t t_imm12 = twos((uint32_t)se_imm12);
@@ -298,7 +288,7 @@ void execute(core_t *core)
 
   case S: {
     const uint32_t op = dec->opcode | (dec->funct3 << 7);
-    const int32_t se_imm12 = (dec->imm12<<20)>>20; // sign extend
+    const int32_t se_imm12 = (dec->imm12<<20)>>20;
     const int32_t t_imm12 = twos((uint32_t)se_imm12);
     dec->writeMem = true;
     dec->memOffset = dec->rs1v + t_imm12;
@@ -314,25 +304,19 @@ void execute(core_t *core)
       break;
     }
     case OP_SW: {
-      // 111111101111 01000 010 01100 0100011
-      // ^            ^     ^   ^     ^
-      // imm110       rs1   f3  imm40 opcode
-      //                             
       dec->memAccessWidth = WORD;
       core->aluOut = dec->rs2v & 0xffffffff; // the word to store
-      // fprintf(stderr, "OP_SW: offs=0x%08x  rs1: %d (0x%08x)  rs2: %d (0x%08x) imm12: 0x%03x se_imm12: 0x%08x  t_imm12: %d\n", dec->memOffset, dec->rs1, dec->rs1v, dec->rs2, dec->rs2v, dec->imm12, se_imm12, t_imm12);
       break;
     }
     default: assert(false); break;
     }
     break;
-  } // S-type
+  } // S
 
   case B: {
     const uint32_t op = (dec->opcode | (dec->funct3 << 7));
     const int32_t se_imm12 = (int32_t)((dec->imm12<<21)>>20);
     dec->jumpTarget = core->pc + se_imm12;
-    //fprintf(stderr, "cpu::execute: Branch op=0x%08x, target=0x%08x (0x%08x)  se_imm12: 0x%08x\n", op, dec->jumpTarget, dec->imm12<<1, se_imm12);
     switch(op) {
     case OP_BEQ:  core->aluOut = dec->rs1v == dec->rs2v ? 1 : 0;                  break;
     case OP_BNE:  core->aluOut = dec->rs1v != dec->rs2v ? 1 : 0;                  break;
@@ -365,17 +349,12 @@ void execute(core_t *core)
   } // U
 
   case J: {
-    //    const int32_t m = 1 << (20 -1);
-    //    const int32_t se_imm20 = (dec->imm20 ^ m) - m;
-    //const int32_t se_imm20 = (dec->imm20 << 11) >> 11;
-    //    fprintf(stderr, "cpu::execute J opcode=0x%02x OP_JAL=0x%02x %x\n", dec->opcode, OP_JAL & 0x7f);
     dec->isJump = true;
     dec->writeRd = true;
     switch(dec->opcode) {
     case OP_JAL & 0x7f: {
-      const se_imm21 = (int32_t)((dec->imm20<<13)>>12);
+      const uint32_t se_imm21 = (int32_t)((dec->imm20<<13)>>12);
       dec->jumpTarget = core->pc + se_imm21;
-      //      fprintf(stderr, "cpu::execute JAL jumpTarget=0x%08x imm20:0x%08x se_imm21:0x%08x\n", dec->jumpTarget, (int32_t)(dec->imm20), se_imm21);
       break;
     }
     default:
@@ -386,7 +365,7 @@ void execute(core_t *core)
     break;
   } // J
     
-  case C: {
+  case C: { // TODOOO: Implement
     //    switch(dec->funct3) {
     //    }
     assert(dec->optype != C);
@@ -394,7 +373,7 @@ void execute(core_t *core)
   } // C
 
   case Unknown:
-    // TODO: Illegal instruction trap
+    // Illegal instruction trap
     core->state = TRAP;
     core->csr.mcause = 2;
     core->trap_state = ENTER;
@@ -406,14 +385,12 @@ void execute(core_t *core)
 
 void memory_access(core_t *core)
 {
+  // TODO: Cache
   const instr_t *dec = &core->decoded;
-  //  assert(core->state == MEMORY);
   if(dec->readMem) {
     core->aluOut = bus_read_single(core->bus, dec->memOffset, dec->memAccessWidth);
-    //    fprintf(stderr, "memory_access::read 0x%08x => 0x%08x\n", dec->memOffset, core->aluOut);
   } else if(dec->writeMem) {
     bus_write_single(core->bus, dec->memOffset, core->aluOut, dec->memAccessWidth);
-    //    fprintf(stderr, "memory_access::write 0x%08x <= 0x%08x\n", dec->memOffset, core->aluOut);
   }
 }
 
@@ -424,7 +401,6 @@ void writeback(core_t *core)
   //  assert(core->state == WRITEBACK);
   if(dec->writeRd) {
     REG_W(core->decoded.rd, core->aluOut);
-    //    fprintf(stderr, "writeback::writeRd X%d = 0x%08x\n", core->decoded.rd, core->aluOut);
   }
 
   if(dec->isJump) {
@@ -441,6 +417,7 @@ void trap(core_t *core)
   case ENTER:
     fprintf(stderr, "cpu::cycle: TRAP @ 0x%08x\n", core->pc);
     assert(false);
+
     memcpy(core->trap_regs, core->registers, NUMREGS*sizeof(uint32_t));
     core->prefetch_cnt = 0;  // flush prefetch cache, since pc changes
     core->trap_pc = core->pc;
@@ -474,7 +451,7 @@ void core_cycle(core_t *core)
   //  fprintf(stderr, "core %d: pc=0x%08x\n", core->id, core->pc);
 
   switch(core->state) {
-  case TRAP:      trap(core);  core->cycle++;        break;
+  case TRAP:      _stage(trap, FETCH);               break;
   case FETCH:     _stage(fetch, DECODE);             break;
   case DECODE:    _stage(decode, EXECUTE);           break;
   case EXECUTE:   _stage(execute, MEMORY);           break;
