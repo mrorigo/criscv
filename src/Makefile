@@ -1,7 +1,7 @@
 CCACHE=ccache
 CC=$(CCACHE) gcc
 INCLUDE=`pkg-config --cflags libelf`
-CFLAGS=-g -Wextra -Wall -Wpedantic -Wno-gnu-binary-literal -fomit-frame-pointer -O3 ${INCLUDE}
+CFLAGS=-g -Wextra -Wall -Wpedantic -Wno-gnu-binary-literal -fomit-frame-pointer -O0 ${INCLUDE}
 #-fsanitize=address
 #CCOPTS=-ggdb -Wextra -Wall -Wpedantic -O3
 LD=clang
@@ -9,7 +9,7 @@ LDFLAGS=-lpthread
 #-fsanitize=address
 
 
-objects = memory.o bus.o cpu.o csr.o elf32.o main.o
+objects = memory.o bus.o cpu.o csr.o elf32.o emulator.o mmu.o main.o
 
 main: $(objects) Makefile
 	$(LD) $(LDFLAGS) -o main $(objects)
