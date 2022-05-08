@@ -106,7 +106,13 @@ void emulator_run(emulator_t *emu)
 
   fprintf(stderr, "Initializing %d cores with pc 0x%08x\n", NUMCORES, emu->elf->entry);
   for(size_t i=0; i < NUMCORES; i++) {
+    const vaddr_t stack = mmu_allocate_raw(emu->mmu, STACK_SIZE);
+    const vaddr_t stack_top = stack + STACK_SIZE - sizeof(uint32_t);
+    // stack lives in x2
     core_init(cpu, i, emu->elf->entry);
+    cpu->cores[i]->registers[2] = stack_top;
+    // TODO: global pointer (x3)
+    
     core_start(cpu, i);
   }
 

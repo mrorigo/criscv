@@ -32,8 +32,8 @@
 
 //struct _reent *_impure_ptr;
 
-int main(int argc, char **argv)
-{
+int _start() {
+  //int main(int argc, char **argv) {
   //  putc('X', stdout);
   
   //  __asm("csrr x5, mepc"); // get last trap address into x5
@@ -41,7 +41,7 @@ int main(int argc, char **argv)
 
   int j = 13;//strlen(argv[0]);
   int t = 19;
-  while(1) {
+  while(j < 1000) {
     for(int i=0; i < 10; i++) {
       j += i | t;
     }

@@ -1,10 +1,11 @@
 CC=riscv64-unknown-elf-gcc
 LD=riscv64-unknown-elf-gcc
 OBJDUMP=riscv64-unknown-elf-objdump
-LIBC=-L../../../riscv-gnu-toolchain/newlib/riscv32-unknown-elf/newlib -lc
+LIBC=-nostdlib -nostartfiles  
+#LIBC=-L../../../riscv-gnu-toolchain/newlib/riscv32-unknown-elf/newlib -lc
 LIBC2=-L../../picolibc/build-rv32i-unknown-elf/newlib/ -lc
 LDFLAGS=-Tlink.ld -mno-relax -march=rv32i -mabi=ilp32 $(LIBC)
-CFLAGS=-march=rv32i -mabi=ilp32 -O3 -fomit-frame-pointer  $(INCLUDE)
+CFLAGS=-march=rv32i -mabi=ilp32 -O0 -fomit-frame-pointer  $(INCLUDE)
 
 all: hello
 
