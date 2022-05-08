@@ -1,4 +1,4 @@
-#include <stdio.h>
+#include <string.h>
 /**
    00010074 <_start>:
    10074:	fe010113          	addi	x2,x2,-32
@@ -32,14 +32,14 @@
 
 //struct _reent *_impure_ptr;
 
-int _start()
+int main(int argc, char **argv)
 {
   //  putc('X', stdout);
   
   //  __asm("csrr x5, mepc"); // get last trap address into x5
   //  __asm("FENCE.I"); // illegal
 
-  int j = 13;
+  int j = 13;//strlen(argv[0]);
   int t = 19;
   while(1) {
     for(int i=0; i < 10; i++) {
