@@ -21,11 +21,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #ifndef __MEMORY_H__
 #define __MEMORY_H__
 
+#include "mmu.h"
 #include "mmio.h"
 
-void init_ram_rom(mmio_device_t *ram);
-uint32_t read_ram_rom(const mmio_device_t *ram, const uint32_t offs,  memory_access_width_t aw);
-void write_ram_rom(mmio_device_t *ram, uint32_t offs, uint32_t value,  memory_access_width_t aw);
+void init_ram(mmio_device_t *ram);
+uint32_t read_ram(const mmio_device_t *ram, const uint32_t offs, const memory_access_width_t aw);
+void write_ram(mmio_device_t *ram, const uint32_t offs, const uint32_t value, const memory_access_width_t aw);
 
 void dump_ram_rom(const mmio_device_t *ram,
 		  const uint32_t offs,
