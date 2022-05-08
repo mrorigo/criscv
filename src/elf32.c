@@ -60,15 +60,23 @@ Elf32 *elf_load (uint8_t *elf_start, mmu_t *mmu)
   Elf32_Shdr *shdr = (Elf32_Shdr *)(elf_start + hdr->e_shoff);
 
   
-  vaddr_t min_vaddr = 1e31;
-  vaddr_t max_vaddr = -1e31;
+  vaddr_t min_vaddr = 0x7fffffff;
+  vaddr_t max_vaddr = 0x0;
+
   for(size_t i=0; i < hdr->e_shnum; ++i) {
-    min_vaddr = shdr[i].sh_addr < min_vaddr ? shdr[i].sh_addr : min_vaddr;
-    max_vaddr = shdr[i].sh_addr + shdr[i].sh_size > max_vaddr ?
-      shdr[i].sh_addr + shdr[i].sh_size : max_vaddr;
+    if(shdr[i].sh_type == SHT_PROGBITS && shdr[i].sh_addr != 0) {
+      fprintf(stderr, "_elf: shdr[i].sh_type %zu addr: 0x%08x min:0x%08x\n", shdr[i].sh_type, shdr[i].sh_addr, min_vaddr);
+      min_vaddr = shdr[i].sh_addr < min_vaddr ? shdr[i].sh_addr : min_vaddr;
+      fprintf(stderr, "_elf:   min_vaddr now 0x%08x\n", min_vaddr);
+      max_vaddr = shdr[i].sh_addr + shdr[i].sh_size > max_vaddr ?
+	shdr[i].sh_addr + shdr[i].sh_size : max_vaddr;
+    }
   }
+  fprintf(stderr, "_elf: min_vaddr 0x%08x\n", min_vaddr);
+  fprintf(stderr, "_elf: max_vaddr 0x%08x\n", max_vaddr);
   const size_t mem_size = max_vaddr - min_vaddr;
   elf->load = mmu_allocate_raw(mmu, mem_size);
+  assert(elf->load);
   fprintf(stderr, "_elf: size: %zu alloced at 0x%08x\n", mem_size, elf->load);
 
   //  vaddr_t entry_reloc_offs = 0;
