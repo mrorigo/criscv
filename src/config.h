@@ -2,10 +2,9 @@
 #define __CONFIG_H__
 
 #define PREFETCH_SIZE 4
-#define NUMCORES 2
+#define NUMCORES 1
 
 #define RAM_SIZE 1024 * 1000 * 4 // 4mb
-#define ROM_SIZE 1024            // 1kb
 
 
 /**
@@ -22,7 +21,6 @@
    0x203e8000  - END OF RAM
  */
 
-#define ROM_START 0x10000000
 #define RAM_START 0x20000000
 
 #define ARGV_SIZE 1024
