@@ -111,7 +111,6 @@ void core_join(RV32I_cpu_t *cpu, uint32_t core_num)
 
 void fetch(core_t *core)
 {
-  //  fprintf(stderr, "\ncpu::fetch pc=0x%08x, core->prefetch_cnt(%d)\n", core->pc, core->prefetch_cnt);
   
   if(core->prefetch_cnt == 0) {
     bus_read_multiple(core->bus, core->pc, &core->instruction, PREFETCH_SIZE, WORD);
@@ -120,6 +119,7 @@ void fetch(core_t *core)
     core->instruction = core->prefetch[PREFETCH_SIZE-1-core->prefetch_cnt];
     core->prefetch_cnt--;
   }
+  fprintf(stderr, "\ncpu::fetch pc=0x%08x, core->prefetch_cnt(%d) instr=0x%08x\n", core->pc, core->prefetch_cnt, core->instruction);
 }
 
 // We allow writes to ZERO, because REG_R handles this case
@@ -251,15 +251,22 @@ void execute(core_t *core)
       dec->jumpTarget = dec->rs1v + se_imm12;
       break;
     case OP_LB:
+    case OP_LBU:
       dec->memOffset = dec->rs1v + se_imm12;
       dec->memAccessWidth = BYTE;
       core->aluOut = dec->rs2v & 0xff;
       dec->readMem = true;
       break;
-    case OP_LH:
+    case OP_LHU:
       dec->memOffset = dec->rs1v + se_imm12;
       dec->memAccessWidth = HALFWORD;
       core->aluOut = dec->rs2v & 0xffff;
+      dec->readMem = true;
+      break;
+    case OP_LH:
+      dec->memOffset = dec->rs1v + se_imm12;
+      dec->memAccessWidth = HALFWORD;
+      core->aluOut = ((dec->rs2v & 0xffff)<<16)>>16;
       dec->readMem = true;
       break;
     case OP_LW:
@@ -281,7 +288,9 @@ void execute(core_t *core)
     case OP_SLLI:      core->aluOut = dec->rs1v << dec->shamt;				break;
     case OP_SRLI:      core->aluOut = dec->rs1v >> dec->shamt;				break;
     case OP_SRAI:      core->aluOut = ((int32_t)dec->rs1v) >> dec->shamt;		break;
-    default:           assert(false);							break;
+    default:
+      
+      assert(false);							break;
     }
     break;
   }
