@@ -81,7 +81,7 @@ vaddr_t mmu_allocate_raw(mmu_t *mmu, const size_t size)
   return mmu_allocate(mmu, size, MPERM_WRITE|MPERM_RAW);
 }
 
-bool check_has_access(const mmu_t *mmu,
+bool mmu_check_access(const mmu_t *mmu,
 		      const vaddr_t vaddr,
 		      const size_t size_in_bytes,
 		      const mperm_t perm)
@@ -90,10 +90,10 @@ bool check_has_access(const mmu_t *mmu,
     const mperm_t p = mmu->perm[i];
     if((p & perm) != perm) {
       if((p & MPERM_RAW) == MPERM_RAW) {
-	fprintf(stderr, "mmu::check_has_access: Read of uninitialized RAW memory at 0x%08x\n", (unsigned int)i + mmu->base);
+	fprintf(stderr, "mmu::check_access: Read of uninitialized RAW memory at 0x%08x\n", (unsigned int)i + mmu->base);
 	exit(99);
       } else {
-	fprintf(stderr, "mmu::check_has_access: Access denied to memory at 0x%08x. perm=%02x, requested perm=%02x\n", (vaddr_t)(vaddr+i), MPERM_RAW, perm);
+	fprintf(stderr, "mmu::check_access: Access denied to memory at 0x%08x. perm=%02x, requested perm=%02x\n", (vaddr_t)(vaddr+i), MPERM_RAW, perm);
 	assert(false);
       }
       return false;
@@ -106,7 +106,7 @@ int mmu_write_from(mmu_t *mmu, void *src, const vaddr_t vaddr, const size_t size
 {
   assert(vaddr >= mmu->base);
   assert(vaddr <= mmu->base + mmu->size );
-  if(!check_has_access(mmu, vaddr, size_in_bytes, MPERM_WRITE)) {
+  if(!mmu_check_access(mmu, vaddr, size_in_bytes, MPERM_WRITE)) {
     return 0;
   }
   
@@ -135,7 +135,7 @@ int mmu_read_into(mmu_t *mmu,
 {
   assert(vaddr < mmu->base + mmu->size);
   assert(mmu->base <= vaddr);
-  if(check_has_access(mmu, vaddr, size_in_bytes, MPERM_READ)) {
+  if(mmu_check_access(mmu, vaddr, size_in_bytes, MPERM_READ)) {
     memcpy(dst, (uint8_t*)mmu->data + (vaddr - mmu->base), size_in_bytes);
   } else {
     fprintf(stderr, "mmu::read_into from 0x%08x, size %zu, access denied!\n", vaddr, size_in_bytes);
