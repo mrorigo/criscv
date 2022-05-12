@@ -24,17 +24,15 @@ typedef struct _mmu_t {
 
 #define DIRTY_PAGE_SIZE 64
 
-bool check_has_access(const mmu_t	*mmu,
-		      const vaddr_t	 vaddr,
-		      const size_t	 size_in_bytes,
-		      const mperm_t	 perm);
-
-mmu_t	*mmu_init(const vaddr_t base, const size_t size);
-vaddr_t	 mmu_allocate(mmu_t *mmu, const size_t size, mperm_t perm);
-vaddr_t	 mmu_allocate_raw(mmu_t *mmu, const size_t size);
-int	 mmu_write_from(mmu_t *mmu, void *src, vaddr_t vaddr, size_t size_in_bytes);
-int	 mmu_read_into(mmu_t *mmu, void *dst, vaddr_t vaddr, size_t size_in_bytes);
-void mmu_setperm(mmu_t *mmu, const vaddr_t vaddr, const size_t size,
-                 const mperm_t perm);
+bool     mmu_check_access(const mmu_t *,
+			  const vaddr_t,
+			  const size_t,
+			  const mperm_t);
+mmu_t	*mmu_init(const vaddr_t, const size_t);
+vaddr_t	 mmu_allocate(mmu_t *, const size_t, mperm_t);
+vaddr_t	 mmu_allocate_raw(mmu_t *, const size_t);
+int	 mmu_write_from(mmu_t *, void *, vaddr_t, size_t);
+int	 mmu_read_into(mmu_t *, void *, vaddr_t, size_t);
+void	 mmu_setperm(mmu_t *, const vaddr_t, const size_t, const mperm_t);
 
 #endif

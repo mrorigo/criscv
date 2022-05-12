@@ -24,8 +24,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "mmu.h"
 #include "mmio.h"
 
-void init_ram(mmio_device_t *ram);
-uint32_t read_ram(const mmio_device_t *ram, const uint32_t offs, const memory_access_width_t aw);
-void write_ram(mmio_device_t *ram, const uint32_t offs, const uint32_t value, const memory_access_width_t aw);
+void     init_ram(mmio_device_t *);
+uint32_t read_ram(const mmio_device_t *,
+		  const uint32_t,
+		  const memory_access_width_t);
+void     write_ram(mmio_device_t *,
+		   const uint32_t,
+		   const uint32_t,
+		   const memory_access_width_t);
 
 #endif

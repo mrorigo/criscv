@@ -292,10 +292,9 @@ typedef enum __attribute((packed)) _trap_state_t {
 typedef struct __attribute((packed)) _core_t {
   core_state_t state;
   
-  uint64_t    cycle;
-
   uint32_t    instruction;
   uint32_t    prefetch[PREFETCH_SIZE-1];
+  instr_t     decoded;
   
   uint32_t    pc; // pc, pcNext
   uint32_t    aluOut;
@@ -307,15 +306,13 @@ typedef struct __attribute((packed)) _core_t {
 
   uint32_t    trap_pc;
   uint32_t    trap_regs[NUMREGS];
-  
-  instr_t     decoded;
 
   uint8_t    prefetch_cnt:4; // for alignment/packing purposes
   uint8_t     id:4;
   bool        halted:1;
   trap_state_t trap_state;
+  uint64_t    cycle;
 } core_t;
-
 
 typedef struct __attribute((packed)) _RV32I_t {
   core_t      **cores;
@@ -323,11 +320,10 @@ typedef struct __attribute((packed)) _RV32I_t {
   bus_t       *bus;
 } RV32I_cpu_t;
 
-
-RV32I_cpu_t *cpu_init(bus_t *bus, uint32_t num_cores);
-core_t *core_init(RV32I_cpu_t *cpu, uint32_t core_num, uint32_t initial_pc);
-void core_cycle(core_t *core);
-void core_start(RV32I_cpu_t *cpu, uint32_t core_num);
-void core_join(RV32I_cpu_t *cpu, uint32_t core_num);
+RV32I_cpu_t	*cpu_init(bus_t *, uint32_t);
+core_t *	 core_init(RV32I_cpu_t *, uint32_t, uint32_t);
+void		 core_cycle(core_t *);
+void		 core_start(RV32I_cpu_t *, uint32_t);
+void		 core_join(RV32I_cpu_t *, uint32_t);
 
 #endif
