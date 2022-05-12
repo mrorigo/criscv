@@ -32,60 +32,26 @@ void bus_init(bus_t *bus)
     dev = dev->next;
   }
 
-  bus->readers = 0;
-  bus->writers = 0;
-  bus->writers_waiting = 0;
-
-  pthread_cond_init(&bus->read_cond, NULL);
-  pthread_cond_init(&bus->write_cond, NULL);
   pthread_mutex_init(&bus->mutex, NULL);
 }
 
 static void bus_lock_read(bus_t *bus)
 {
   pthread_mutex_lock(&bus->mutex);
-  while(bus->writers>0) {
-    //    fprintf(stderr, "bus_lock_read: bus->writers = %d\n", bus->writers);
-    pthread_cond_wait(&bus->read_cond, &bus->mutex);
-  }
-  bus->readers++;
-  pthread_mutex_unlock(&bus->mutex);
 }
 
 static void bus_lock_write(bus_t *bus)
 {
   pthread_mutex_lock(&bus->mutex);
-  bus->writers_waiting++;
-  while(bus->readers > 0 || bus->writers > 0) {
-    //    fprintf(stderr, "bus_lock_write: readers: %d  writers; %d (%d waiting)\n", bus->readers, bus->writers, bus->writers_waiting);
-    pthread_cond_wait(&bus->write_cond, &bus->mutex);
-  }
-  bus->writers_waiting--;
-  bus->writers++;
-  pthread_mutex_unlock(&bus->mutex);
 }
 
 static void bus_unlock_read(bus_t *bus)
 {
-  pthread_mutex_lock(&bus->mutex);
-  assert(bus->readers > 0);
-  bus->readers--;
-  if(bus->readers == 0 && bus->writers_waiting > 0) {
-    pthread_cond_signal(&bus->write_cond);
-  }
   pthread_mutex_unlock(&bus->mutex);
 }
 
 static void bus_unlock_write(bus_t *bus)
 {
-  pthread_mutex_lock(&bus->mutex);
-  assert(bus->writers > 0);
-  bus->writers--;
-  if(bus->writers_waiting > 0) {
-    pthread_cond_signal(&bus->write_cond);
-  }
-  
-  pthread_cond_broadcast(&bus->read_cond);
   pthread_mutex_unlock(&bus->mutex);
 }
 

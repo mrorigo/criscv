@@ -28,11 +28,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 typedef struct _bus_t {
   mmio_device_t *mmio_devices;
   pthread_mutex_t mutex;
-  pthread_cond_t  read_cond;
-  pthread_cond_t  write_cond;
-  uint32_t readers;
-  uint32_t writers;
-  uint32_t writers_waiting;
 } bus_t;
 
 void     bus_init(bus_t *);
