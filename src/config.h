@@ -6,21 +6,6 @@
 
 #define RAM_SIZE 1024 * 1000 * 4 // 4mb
 
-
-/**
-   0x20000000  - RAM START
-   -- --- ---- ----- HEAP ------
-   0x20e36ff0  - heap top
-   0x203e6ff8  - stack bottom
-   -- --- ---- ----- STACK ------
-   0x203e7ff0  -
-   0x203e3bf8  - stack_top
-   0x203e3bfc  - argv_base (argv[0])
-   0x203e7ff8  - end of argv
-   0x203e7ffc  - 4 bytes entry point read by ROM
-   0x203e8000  - END OF RAM
- */
-
 #define RAM_START 0x20000000
 
 #define ARGV_SIZE 1024

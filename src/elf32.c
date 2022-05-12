@@ -6,45 +6,6 @@
 #include <sys/types.h>
 #include "elf32.h"
 
-/* void *resolve(const char* sym) */
-/* { */
-/*   static void *handle = NULL; */
-/*   if (handle == NULL) { */
-/*     handle = dlopen("libc.so", RTLD_NOW); */
-/*   } */
-/*   return dlsym(handle, sym); */
-/* } */
-
-// TODO: relocation
-/* void relocate(Elf32_Shdr* shdr, const Elf32_Sym* syms, const char* strings, const char* src, char* dst) */
-/* { */
-/*   Elf32_Rel* rel = (Elf32_Rel*)(src + shdr->sh_offset); */
-/*   int j; */
-/*   for(j = 0; j < shdr->sh_size / sizeof(Elf32_Rel); j += 1) { */
-/*     const char* sym = strings + syms[ELF32_R_SYM(rel[j].r_info)].st_name; */
-/*     switch(ELF32_R_TYPE(rel[j].r_info)) { */
-/*     case R_386_JMP_SLOT: */
-/*     case R_386_GLOB_DAT: */
-/*       *(Elf32_Word*)(dst + rel[j].r_offset) = (Elf32_Word)resolve(sym); */
-/*       break; */
-/*     } */
-/*   } */
-/* } */
-
-void* find_sym(const char* name,
-	       Elf32_Shdr* shdr,
-	       char* strings,
-	       const unsigned char* src)
-{
-  Elf32_Sym* syms = (Elf32_Sym*)(src + shdr->sh_offset);
-  for(size_t i = 0; i < shdr->sh_size / sizeof(Elf32_Sym); i += 1) {
-    //    fprintf(stderr, "_sym: %s\n", strings + syms[i].st_name);
-    if (strcmp(name, strings + syms[i].st_name) == 0) {
-      return (void *)((uint64_t)syms[i].st_value);
-    }
-  }
-  return NULL;
-}
 
 Elf32 *elf_load (uint8_t *elf_start, mmu_t *mmu)
 {
@@ -70,10 +31,10 @@ Elf32 *elf_load (uint8_t *elf_start, mmu_t *mmu)
 	shdr[i].sh_addr + shdr[i].sh_size : max_vaddr;
     }
   }
-  fprintf(stderr, "_elf: min_vaddr 0x%08x\n", min_vaddr);
-  fprintf(stderr, "_elf: max_vaddr 0x%08x\n", max_vaddr);
-  const size_t mem_size = max_vaddr - min_vaddr;
-  elf->load = mmu_allocate_raw(mmu, mem_size);
+  //  fprintf(stderr, "_elf: min_vaddr 0x%08x\n", min_vaddr);
+  //  fprintf(stderr, "_elf: max_vaddr 0x%08x\n", max_vaddr);
+  const size_t mem_size = ((max_vaddr - min_vaddr)/64 + 1)*64;
+  elf->load = mmu_allocate(mmu, mem_size, MPERM_EXEC|MPERM_WRITE);
   assert(elf->load);
   fprintf(stderr, "_elf: size: %zu alloced at 0x%08x\n", mem_size, elf->load);
 
@@ -92,7 +53,6 @@ Elf32 *elf_load (uint8_t *elf_start, mmu_t *mmu)
       fprintf(stderr, "_elf: entry 0x%08x (0x%08x)\n", elf->entry, hdr->e_entry);
     }
 
-
     if (shdr[i].sh_type == SHT_INIT_ARRAY) { // 14
       assert(elf->base != 0);
       elf->init_count = shdr[i].sh_size / sizeof(uint32_t);
@@ -110,18 +70,14 @@ Elf32 *elf_load (uint8_t *elf_start, mmu_t *mmu)
 	    shdr[i].sh_addr != 0) {
       fprintf(stderr, "_elf: load section from offs 0x%08x to addr 0x%08x\n", shdr[i].sh_offset, RECALC_ADDR(shdr[i].sh_addr));
 
-      mmu_write_from(mmu,
-		     elf_start + shdr[i].sh_offset,
-		     RECALC_ADDR(shdr[i].sh_addr),
-		     shdr[i].sh_size);
-      
+      const size_t size = ((shdr[i].sh_size >> 6) + 1) << 6;
+      mmu_write_from(mmu, elf_start + shdr[i].sh_offset,
+		     RECALC_ADDR(shdr[i].sh_addr), size);
+      mmu_setperm(mmu,
+		  RECALC_ADDR(shdr[i].sh_addr),
+		  size,
+		  MPERM_EXEC|MPERM_READ);
     }
-
-    /* if (shdr[i].sh_type == 2) { // symbols */
-    /*   char *strings = (char *)(elf_start + shdr[shdr[i].sh_link].sh_offset); */
-    /*   //      entry = find_sym("_start", shdr + i, strings, elf_start); */
-    /*   break; */
-    /* } */
   }
 
   return elf;

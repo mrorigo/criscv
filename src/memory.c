@@ -33,35 +33,12 @@ void init_ram(mmio_device_t *ram)
   // Nothing much to do here..
 }
 
-void dump_ram(const mmio_device_t *ram,
-	      const uint32_t offs,
-	      const uint32_t count,
-	      const memory_access_width_t aw)
-{
-  uint32_t c=0;
-  uint32_t addr = ram->base_address + offs;
-  
-  for(size_t i=offs; i < offs+count; i++) {
-    if(c == 0) {
-      fprintf(stderr, "\n0x%08x: ", addr);
-    } else {
-      // TODO: Use mmu
-      uint32_t v = ((uint32_t*)ram->user)[i & (ram->size-1)];
-      fprintf(stderr, " %08x", v);
-    }
-    c = (c+1) % 8;
-    addr++;
-  }
-}
-
 __attribute((__always_inline__))
   uint32_t read_ram(const mmio_device_t *ram, const vaddr_t offs, const memory_access_width_t aw)
 {
   mmu_t *mmu = (mmu_t *)ram->user;
 
-  //  fprintf(stderr, "memory::read_ram: 0x%08x\n", offs);
   if(aw == WORD) {
-    //    assert((offs & 3) == 0);
     uint32_t ret = 0;
     mmu_read_into(mmu, &ret, offs, sizeof(uint32_t));
     return ret;
@@ -78,7 +55,10 @@ __attribute((__always_inline__))
 }
 
 __attribute((__always_inline__))
-void write_ram(mmio_device_t *ram, const vaddr_t offs, const uint32_t value, const memory_access_width_t aw)
+void write_ram(mmio_device_t *ram,
+	       const vaddr_t offs,
+	       const uint32_t value,
+	       const memory_access_width_t aw)
 {
   mmu_t *mmu = (mmu_t *)ram->user;
   //  fprintf(stderr, "memory::write_ram: %08x = %08x (%u)\n", offs, value, aw);

@@ -6,9 +6,9 @@
 
 typedef enum _mperm_t {
   MPERM_READ	= 1,
-  MPERM_WRITE	= 1<<1,
-  MPERM_EXEC	= 1<<2,
-  MPERM_RAW	= 1<<3
+  MPERM_WRITE	= 2,
+  MPERM_EXEC	= 4,
+  MPERM_RAW	= 8
 } mperm_t;
 
 typedef uint32_t vaddr_t;
@@ -34,5 +34,7 @@ vaddr_t	 mmu_allocate(mmu_t *mmu, const size_t size, mperm_t perm);
 vaddr_t	 mmu_allocate_raw(mmu_t *mmu, const size_t size);
 int	 mmu_write_from(mmu_t *mmu, void *src, vaddr_t vaddr, size_t size_in_bytes);
 int	 mmu_read_into(mmu_t *mmu, void *dst, vaddr_t vaddr, size_t size_in_bytes);
+void mmu_setperm(mmu_t *mmu, const vaddr_t vaddr, const size_t size,
+                 const mperm_t perm);
 
 #endif

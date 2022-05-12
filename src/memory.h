@@ -28,9 +28,4 @@ void init_ram(mmio_device_t *ram);
 uint32_t read_ram(const mmio_device_t *ram, const uint32_t offs, const memory_access_width_t aw);
 void write_ram(mmio_device_t *ram, const uint32_t offs, const uint32_t value, const memory_access_width_t aw);
 
-void dump_ram_rom(const mmio_device_t *ram,
-		  const uint32_t offs,
-		  const uint32_t count,
-		  const memory_access_width_t aw);
-
 #endif

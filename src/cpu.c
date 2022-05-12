@@ -119,7 +119,7 @@ void fetch(core_t *core)
     core->instruction = core->prefetch[PREFETCH_SIZE-1-core->prefetch_cnt];
     core->prefetch_cnt--;
   }
-  fprintf(stderr, "\ncpu::fetch pc=0x%08x, core->prefetch_cnt(%d) instr=0x%08x\n", core->pc, core->prefetch_cnt, core->instruction);
+  //  fprintf(stderr, "\ncpu::fetch pc=0x%08x, core->prefetch_cnt(%d) instr=0x%08x\n", core->pc, core->prefetch_cnt, core->instruction);
 }
 
 // We allow writes to ZERO, because REG_R handles this case
@@ -190,7 +190,11 @@ void decode(core_t *core)
     const uint32_t  imm11 = (i >> 20) & 0b1;
     const uint32_t  imm1912 = (i >> 12) & 0b11111111;
 
-    const int32_t imm = (imm20 << 20) | (imm101 << 1) | (imm11 << 11) | (imm1912 << 12);
+    const int32_t imm =
+      (imm20 << 20) |
+      (imm101 << 1) |
+      (imm11 << 11) |
+      (imm1912 << 12);
     dec->imm20 = ((imm) << 11) >> 12;
   }
     break;
@@ -266,7 +270,7 @@ void execute(core_t *core)
     case OP_LH:
       dec->memOffset = dec->rs1v + se_imm12;
       dec->memAccessWidth = HALFWORD;
-      core->aluOut = ((dec->rs2v & 0xffff)<<16)>>16;
+      core->aluOut = ((int32_t)(dec->rs2v & 0xffff)<<16)>>16;
       dec->readMem = true;
       break;
     case OP_LW:
@@ -280,17 +284,15 @@ void execute(core_t *core)
       core->aluOut = (uint32_t)((int32_t)dec->rs1v + t_imm12);
       break;
     }
-    case OP_SLTI:      core->aluOut = (int32_t)dec->rs1v < (int32_t)se_imm12 ? 1 : 0;   break;
-    case OP_SLTIU:     core->aluOut = dec->rs1v < (uint32_t)se_imm12 ? 1 : 0;		break;
-    case OP_XORI:      core->aluOut = dec->rs1v ^ se_imm12 ? 1 : 0;			break;
-    case OP_ORI:       core->aluOut = dec->rs1v | (se_imm12&0xfff) ? 1 : 0;		break;
-    case OP_ANDI:      core->aluOut = dec->rs1v & se_imm12 ? 1 : 0;			break;
-    case OP_SLLI:      core->aluOut = dec->rs1v << dec->shamt;				break;
-    case OP_SRLI:      core->aluOut = dec->rs1v >> dec->shamt;				break;
-    case OP_SRAI:      core->aluOut = ((int32_t)dec->rs1v) >> dec->shamt;		break;
-    default:
-      
-      assert(false);							break;
+    case OP_SLTI:  core->aluOut = (int32_t)dec->rs1v < (int32_t)se_imm12 ? 1 : 0;  break;
+    case OP_SLTIU: core->aluOut = dec->rs1v < (uint32_t)se_imm12 ? 1 : 0;          break;
+    case OP_XORI:  core->aluOut = dec->rs1v ^ se_imm12 ? 1 : 0;			   break;
+    case OP_ORI:   core->aluOut = dec->rs1v | (se_imm12&0xfff) ? 1 : 0;		   break;
+    case OP_ANDI:  core->aluOut = dec->rs1v & se_imm12 ? 1 : 0;			   break;
+    case OP_SLLI:  core->aluOut = dec->rs1v << dec->shamt;			   break;
+    case OP_SRLI:  core->aluOut = dec->rs1v >> dec->shamt;			   break;
+    case OP_SRAI:  core->aluOut = ((int32_t)dec->rs1v) >> dec->shamt;		   break;
+    default: assert(false); break;
     }
     break;
   }
@@ -362,8 +364,9 @@ void execute(core_t *core)
     dec->writeRd = true;
     switch(dec->opcode) {
     case OP_JAL & 0x7f: {
-      const uint32_t se_imm21 = (int32_t)((dec->imm20<<13)>>12);
-      dec->jumpTarget = core->pc + se_imm21;
+      //      const uint32_t se_imm21 = dec->imm20; //(int32_t)((dec->imm20<<12)>>11);
+      dec->jumpTarget = core->pc + (dec->imm20<<1);
+      //fprintf(stderr, "JAL jumpTarget: 0x%08x imm20: 0x%08x\n", dec->jumpTarget, dec->imm20);
       break;
     }
     default:
@@ -398,7 +401,9 @@ void memory_access(core_t *core)
   const instr_t *dec = &core->decoded;
   if(dec->readMem) {
     core->aluOut = bus_read_single(core->bus, dec->memOffset, dec->memAccessWidth);
+    //    fprintf(stderr, "readMem at 0x%08x (%hhu)\n => 0x%08x", dec->memOffset, dec->memAccessWidth, core->aluOut);
   } else if(dec->writeMem) {
+    //    fprintf(stderr, "writeMem at 0x%08x (%hhu): 0x%08x\n", dec->memOffset, dec->memAccessWidth, core->aluOut);
     bus_write_single(core->bus, dec->memOffset, core->aluOut, dec->memAccessWidth);
   }
 }

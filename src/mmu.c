@@ -8,9 +8,9 @@
 
 void mmu_setperm(mmu_t *mmu, const vaddr_t vaddr, const size_t size, const mperm_t perm)
 {
+  fprintf(stderr, "mmu::setperm vaddr=0x%08x, size=%zu, perm=0x%02x\n", vaddr, size, perm);
   assert(vaddr >= mmu->base);
   assert(vaddr+size <= mmu->base+mmu->size);
-  fprintf(stderr, "mmu::setperm vaddr=0x%08x, size=%zu\n", vaddr, size);
   for(size_t i=vaddr-mmu->base; i < vaddr-mmu->base+size; i++) {
     mmu->perm[i] = perm;
   }
@@ -63,14 +63,15 @@ vaddr_t mmu_allocate(mmu_t *mmu, const size_t size, mperm_t perm)
   const size_t aligned_size = (size + 0x0f) & (0xfffffff0);
   const uint32_t curr_vaddr = mmu->curr_vaddr;
 
-  //  fprintf(stderr, "mmu::allocate_rw: size=%zu, aligned_size=%zu\n", size, aligned_size);
-
   if(curr_vaddr+aligned_size >= mmu->base + mmu->size) {
     fprintf(stderr, "mmu::allocate_rw: Out of memory at 0x%08x, size=%zu\n", curr_vaddr, mmu->size);
     return 0;
   }
   mmu->curr_vaddr = curr_vaddr + aligned_size; // TODO: overflow
   mmu_setperm(mmu, curr_vaddr, size, perm);
+
+  fprintf(stderr, "mmu::allocate_rw: size=%zu, aligned_size=%zu  addr=0x%08x\n", size, aligned_size, curr_vaddr);
+
   return curr_vaddr;
 }
 
@@ -89,10 +90,11 @@ bool check_has_access(const mmu_t *mmu,
     const mperm_t p = mmu->perm[i];
     if((p & perm) != perm) {
       if((p & MPERM_RAW) == MPERM_RAW) {
-	fprintf(stderr, "mmu::check_has_access: Read of uninitialized RAW memory at 0x%08x\n", (unsigned int)i);
+	fprintf(stderr, "mmu::check_has_access: Read of uninitialized RAW memory at 0x%08x\n", (unsigned int)i + mmu->base);
 	exit(99);
       } else {
-	fprintf(stderr, "mmu::check_has_access: Access denied to memory at 0x%08x. p=%02x, perm=%02x\n", (vaddr_t)(vaddr+i), MPERM_RAW, perm);
+	fprintf(stderr, "mmu::check_has_access: Access denied to memory at 0x%08x. perm=%02x, requested perm=%02x\n", (vaddr_t)(vaddr+i), MPERM_RAW, perm);
+	assert(false);
       }
       return false;
     }
@@ -113,7 +115,7 @@ int mmu_write_from(mmu_t *mmu, void *src, const vaddr_t vaddr, const size_t size
   // Update perms
   for(size_t i = vaddr-mmu->base; i < vaddr-mmu->base+size_in_bytes; i++) {
     if((mmu->perm[i] & MPERM_RAW) == MPERM_RAW) {
-      mmu->perm[i] = MPERM_READ|MPERM_WRITE;
+      mmu->perm[i] |= MPERM_READ;
     }
   }
 

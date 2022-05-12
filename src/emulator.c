@@ -23,8 +23,6 @@ bus_t main_bus = {
 };
 
 
-//0x203dfffc
-//0x203deffc    
 void load_into_ram(bus_t *bus,
 		   const uint32_t base_addr,
 		   const uint32_t *rom,
@@ -34,6 +32,7 @@ void load_into_ram(bus_t *bus,
     bus_write_single(bus, base_addr + i*sizeof(uint32_t), rom[i], WORD);
   }
 }
+
 
 uint8_t *load_file(const char *filename, size_t *osize)
 {
@@ -91,7 +90,7 @@ bool emulator_load_elf(emulator_t *emu, const char *filename)
     return false;
   }
   emu->elf = elf_load(file, emu->mmu);
-  fprintf(stderr, "- entry point: 0x%08x, stack_top=0x%08x stack_size=%d\n", emu->elf->entry, STACK_TOP, STACK_SIZE);
+  fprintf(stderr, "- entry point: 0x%08x\n", emu->elf->entry);
   assert(emu->elf->entry);
   free(file);
 
@@ -108,8 +107,11 @@ void emulator_run(emulator_t *emu)
   for(size_t i=0; i < NUMCORES; i++) {
     const vaddr_t stack = mmu_allocate_raw(emu->mmu, STACK_SIZE);
     const vaddr_t stack_top = stack + STACK_SIZE - sizeof(uint32_t);
-    // stack lives in x2
+    fprintf(stderr, "Stack allocated at 0x%08x, top at 0%08x\n", stack, stack_top);
     core_init(cpu, i, emu->elf->entry);
+    // return address lives in x1
+    cpu->cores[i]->registers[1] = emu->elf->entry;
+    // stack lives in x2
     cpu->cores[i]->registers[2] = stack_top;
     // TODO: global pointer (x3)
     
