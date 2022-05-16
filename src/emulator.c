@@ -70,12 +70,12 @@ emulator_t *emulator_init()
   ram_device.user = (void *)emu->mmu;
 
   // Allocate space for ISR ptr
-  vaddr_t isr_addr = mmu_allocate_raw(emu->mmu, sizeof(vaddr_t)*4);
-  assert(isr_addr == RAM_START);
+  //  vaddr_t isr_addr = mmu_allocate_raw(emu->mmu, sizeof(vaddr_t)*64);
+  //  assert(isr_addr == RAM_START);
 
 
   bus_init(emu->bus);
-  bus_write_single(emu->bus, isr_addr,   0x00001337, WORD);
+  //  bus_write_single(emu->bus, isr_addr,   0x00001337, WORD);
   
   fprintf(stderr, "initializing main bus\n");
   return emu;
@@ -106,14 +106,23 @@ void emulator_run(emulator_t *emu)
   fprintf(stderr, "Initializing %d cores with pc 0x%08x\n", NUMCORES, emu->elf->entry);
   for(size_t i=0; i < NUMCORES; i++) {
     const vaddr_t stack = mmu_allocate_raw(emu->mmu, STACK_SIZE);
-    const vaddr_t stack_top = stack + STACK_SIZE - sizeof(uint32_t);
+    const vaddr_t stack_top = stack + STACK_SIZE - sizeof(uint32_t)*2;
     fprintf(stderr, "Stack allocated at 0x%08x, top at 0%08x\n", stack, stack_top);
     core_init(cpu, i, emu->elf->entry);
     // return address lives in x1
-    cpu->cores[i]->registers[1] = emu->elf->entry;
+    cpu->cores[i]->registers[1] = 0x1337c0de;//emu->elf->entry;
+
     // stack lives in x2
     cpu->cores[i]->registers[2] = stack_top;
-    // TODO: global pointer (x3)
+
+#define push(x) { vaddr_t sp = cpu->cores[i]->registers[X2] - sizeof(vaddr_t); bus_write_single(emu->bus, sp, 0, WORD); cpu->cores[i]->registers[X2] = sp; }
+
+    push(0); // auxp
+    push(0); // envp
+    push(0); // argv null
+    // add args
+    push(0); // argc 
+#undef push    
     
     core_start(cpu, i);
   }
