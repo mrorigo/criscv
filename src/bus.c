@@ -58,6 +58,7 @@ static void bus_unlock_write(bus_t *bus)
 static mmio_device_t *bus_find_device(bus_t *bus, const size_t offs)
 {
   mmio_device_t *dev = bus->mmio_devices;
+  bus->status = OK;
   while(dev != NULL) {
     if((dev->base_address <= offs) &&
        (dev->base_address + (dev->size)) > offs) {
@@ -65,8 +66,9 @@ static mmio_device_t *bus_find_device(bus_t *bus, const size_t offs)
     }
     dev = dev->next;
   }
-  fprintf(stderr, "FATAL: bus_find_device %08zx\n", offs);
-  assert(dev != NULL);
+  bus->status = ADDRESS_NOT_FOUND;
+  //  fprintf(stderr, "FATAL: bus_find_device %08zx\n", offs);
+  //  assert(dev != NULL);
   return NULL;
 }
 
@@ -94,6 +96,10 @@ uint32_t bus_read_single(bus_t *bus, const size_t offs, const memory_access_widt
 {
   bus_begin_read(bus);
   const mmio_device_t *dev = bus_find_device(bus, offs);
+  if(bus->status != OK) {
+    bus_end_read(bus);
+    return 0x0badc0de;
+  }
   uint32_t r = dev->read(dev, offs, aw);
   bus_end_read(bus);
   return r;
@@ -103,6 +109,10 @@ void bus_read_multiple(bus_t *bus, const size_t offs, void *dst, size_t count, c
 {
   bus_begin_read(bus);
   const mmio_device_t *dev = bus_find_device(bus, offs);
+  if(bus->status != OK) {
+    bus_end_read(bus);
+    return;
+  }
   size_t o = offs;
 
   // fast path for instruction prefetch
@@ -142,11 +152,53 @@ void bus_write_single(bus_t *bus, const size_t offs, const uint32_t value, const
 {
   bus_begin_write(bus);
   mmio_device_t *dev = bus_find_device(bus, offs);
+  if(bus->status != OK) {
+    bus_end_write(bus);
+    return;
+  }
   if((dev->perm & WRITE) != WRITE) {
     // TODO: Raise trap
     assert((dev->perm & WRITE) == WRITE);
     return;
   }
   dev->write(dev, offs, value, aw);
+  bus_end_write(bus);
+}
+
+void bus_write_multiple(bus_t *bus, const size_t offs, void *src, size_t count, const memory_access_width_t aw)
+{
+  bus_begin_write(bus);
+  mmio_device_t *dev = bus_find_device(bus, offs);
+  if(bus->status != OK) {
+    bus_end_write(bus);
+    return;
+  }
+  if((dev->perm & WRITE) != WRITE) {
+    // TODO: Raise trap
+    assert((dev->perm & WRITE) == WRITE);
+    return;
+  }
+  size_t o = offs;
+
+  if(aw == WORD) {
+    uint32_t *ptr = (uint32_t *)src;
+    for(size_t i=0; i < count; i++) {
+      dev->write(dev, o, ptr[i], aw);
+      o += 4;
+    }
+  } else if(aw == HALFWORD) {
+    uint16_t *ptr = (uint16_t *)src;
+    for(size_t i=0; i < count; i++) {
+      dev->write(dev, o, ptr[i], aw);
+      o += 2;
+    }
+  }
+  else if(aw == BYTE) {
+    uint8_t *ptr = (uint8_t *)src;
+    for(size_t i=0; i < count; i++) {
+      dev->write(dev, o, ptr[i], aw);
+      o += 1;
+    }
+  }
   bus_end_write(bus);
 }

@@ -49,6 +49,17 @@ typedef struct {
   Elf32_Half	e_shstrndx;
 } Elf32_Ehdr;
 
+typedef struct _Elf32_Phdr {
+  Elf32_Word p_type;   // Type of segment
+  Elf32_Off  p_offset;  // File offset where segment is located, in bytes
+  Elf32_Addr p_vaddr;  // Virtual address of beginning of segment
+  Elf32_Addr p_paddr;  // Physical address of beginning of segment (OS-specific)
+  Elf32_Word p_filesz; // Num. of bytes in file image of segment (may be zero)
+  Elf32_Word p_memsz;  // Num. of bytes in mem image of segment (may be zero)
+  Elf32_Word p_flags;  // Segment flags
+  Elf32_Word p_align;  // Segment alignment constraint
+} Elf32_Phdr;
+
 enum Elf_Ident {
   EI_MAG0		= 0, // 0x7F
   EI_MAG1		= 1, // 'E'
@@ -75,7 +86,28 @@ enum Elf_Type {
   ET_REL		= 1, // Relocatable File
   ET_EXEC		= 2  // Executable File
 };
- 
+
+/*
+ * e_type
+ */
+#define ET_NONE         0
+#define ET_REL          1
+#define ET_EXEC         2
+#define ET_DYN          3
+#define ET_CORE         4
+#define ET_NUM          5
+#define ET_LOOS         0xfe00
+#define ET_HIOS         0xfeff
+#define ET_LOPROC       0xff00
+#define ET_HIPROC       0xffff
+
+/*
+ * sh_flags
+ */
+#define SHF_WRITE     0x1
+#define SHF_ALLOC     0x2
+#define SHF_EXECINSTR 0x4
+
 # define EM_386		(3)  // x86 Machine Type
 # define EV_CURRENT	(1)  // ELF Current Version
 
@@ -109,8 +141,9 @@ typedef struct _Elf32 {
   uint32_t init_count;
   vaddr_t fini_array;
   uint32_t fini_count;
+  vaddr_t global_pointer;
 } Elf32;
 
-Elf32 *elf_load(unsigned char *elf_start, mmu_t *emu);
+Elf32 *elf_load(const unsigned char *elf_start, mmu_t *emu);
 
 #endif

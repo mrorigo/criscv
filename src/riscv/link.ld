@@ -29,5 +29,4 @@ SECTIONS
 
   . = ALIGN(32 / 8);
   _end = .; PROVIDE (end = .);
-
 }

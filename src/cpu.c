@@ -34,10 +34,6 @@ RV32I_cpu_t *cpu_init(bus_t *bus, uint32_t num_cores)
   RV32I_cpu_t *cpu = malloc(sizeof(RV32I_cpu_t));
   memset(cpu, 0, sizeof(RV32I_cpu_t));
   cpu->bus = bus;
-  cpu->cores = malloc(sizeof(core_t *) * num_cores);
-  assert(cpu->cores);
-  cpu->core_threads = malloc(sizeof(pthread_t) * num_cores);
-  assert(cpu->core_threads);
 
   return cpu;
 }
@@ -46,7 +42,7 @@ core_t *core_init(RV32I_cpu_t *cpu, uint32_t core_num, uint32_t initial_pc)
 {
   assert(core_num < NUMCORES);
 
-  core_t *core = cpu->cores[core_num] = (core_t *)malloc(sizeof(core_t));
+  core_t *core = &cpu->cores[core_num];
   assert(core);
 
   core->id     = core_num;
@@ -64,6 +60,7 @@ core_t *core_init(RV32I_cpu_t *cpu, uint32_t core_num, uint32_t initial_pc)
 
 void core_dumpregs(core_t *core)
 {
+  fprintf(stderr, "pc=0x%08x ", core->pc);
   for(size_t i = 0 ; i < NUMREGS; i++) {
     fprintf(stderr, "X%02zu: 0x%08x ", i, core->registers[i]);
     if(i % 4 == 3) {
@@ -72,41 +69,13 @@ void core_dumpregs(core_t *core)
   }
 }
 
-void cpu_thread(void *arg)
-{
-  core_t *core = (core_t *)arg;
-  assert(core);
 
-  struct timespec spec;
-  clock_gettime(CLOCK_REALTIME, &spec);
-  uint64_t lastc = 0;
-  uint64_t start = spec.tv_sec * 1000 + spec.tv_nsec/1.0e6;
-  while(true) {
-    core_cycle(core);
-
-    if(core->cycle % (uint64_t)1e8 == 0) {
-      struct timespec spec;
-      uint64_t cycles = core->cycle / 5;
-
-      clock_gettime(CLOCK_REALTIME, &spec);
-      uint64_t end = spec.tv_sec * 1000 + spec.tv_nsec/1.0e6;
-      float mips = (float)(cycles-lastc) / ((float)(end-start));
-      fprintf(stderr, "mip/s: %2f\n", (mips/1e3));
-      start = end;
-      lastc = cycles;
-    }
-  }
+void cause_trap(core_t *core, trap_cause_t cause) {
+  core->state = TRAP;
+  core->trap_state = ENTER;
+  core->csr.mcause = cause;
 }
 
-void core_start(RV32I_cpu_t *cpu, uint32_t core_num)
-{
-  pthread_create(&cpu->core_threads[core_num], NULL, cpu_thread, (void *)(cpu->cores[core_num]));
-}
-
-void core_join(RV32I_cpu_t *cpu, uint32_t core_num)
-{
-  pthread_join(cpu->core_threads[core_num], NULL);
-}
 
 void fetch(core_t *core)
 {
@@ -205,12 +174,12 @@ void decode(core_t *core)
     fprintf(stderr, "cpu:%d:decode i=0x%08x: unknown opcode=0x%08x optype=%x, pc=0x%08x\n", core->id, i, dec->opcode, dec->optype, core->pc);
 
     // TODO: Illegal instruction trap
-    core->state = TRAP;
-    core->trap_state = ENTER;
+    cause_trap(core, ILLEGAL_INSTRUCTION);
     break;
   }
 
 }
+
 
 #define twos(x) (x >= 0x80000000) ? -(int32_t)(~x + 1) : x
 
@@ -241,9 +210,7 @@ void execute(core_t *core)
     case OP_AND:  core->aluOut = dec->rs1v & dec->rs2v;                            break;
     default:
       
-      core->state = TRAP;
-      core->csr.mcause = 1; // TODO: define causes
-      core->trap_state = ENTER;
+      cause_trap(core, ILLEGAL_INSTRUCTION);
 
       assert(false);
       break;
@@ -292,6 +259,9 @@ void execute(core_t *core)
       dec->memAccessWidth = WORD;
       core->aluOut = dec->rs2v & 0xffffffff;
       dec->readMem = true;
+      #ifdef CPU_TRACE
+      fprintf(stderr, "cpu::execute OP_LW imm12/se: 0x%08x/0x%08x  memOffset; 0x%08x\n", dec->imm12, se_imm12, dec->memOffset);
+      #endif
       break;
     case OP_ADDI: {
       //      const int32_t t_imm12 = twos((uint32_t)se_imm12);
@@ -407,18 +377,25 @@ void execute(core_t *core)
     break;
   } // J
     
-  case C: { // TODOOO: Implement
+  case C: { // System instruction
+    switch(dec->opcode) {
+    case OP_ECALL: {
+      cause_trap(core, ENV_CALL_UMODE);
+      break;
+    }
+    default:
     //    switch(dec->funct3) {
     //    }
-    assert(dec->optype != C);
+      fprintf(stderr, "opcode: 0x%08x\n", dec->opcode);
+      assert(dec->optype != C);
+      break;
+    }
     break;
   } // C
 
   case Unknown:
     // Illegal instruction trap
-    core->state = TRAP;
-    core->csr.mcause = 2;
-    core->trap_state = ENTER;
+    cause_trap(core, ILLEGAL_INSTRUCTION);
 
     //    assert(false);
     break;
@@ -427,14 +404,27 @@ void execute(core_t *core)
 
 void memory_access(core_t *core)
 {
-  // TODO: Cache
   const instr_t *dec = &core->decoded;
   if(dec->readMem) {
     core->aluOut = bus_read_single(core->bus, dec->memOffset, dec->memAccessWidth);
-    //    fprintf(stderr, "readMem at 0x%08x (%hhu)\n => 0x%08x", dec->memOffset, dec->memAccessWidth, core->aluOut);
+    if(core->bus->status != OK) {
+      switch(core->bus->status) {
+      case READ_MISALIGNED: cause_trap(core, LOAD_ADDR_MISALIGNED); return;
+      case ADDRESS_NOT_FOUND: cause_trap(core, LOAD_ACCESS_FAULT); return;
+      default: cause_trap(core, LOAD_PAGE_FAULT); return;
+      }
+    }
+    fprintf(stderr, "cpu::memory_access::readMem at 0x%08x (%hhu) => 0x%08x", dec->memOffset, dec->memAccessWidth, core->aluOut);
   } else if(dec->writeMem) {
-    //    fprintf(stderr, "writeMem at 0x%08x (%hhu): 0x%08x\n", dec->memOffset, dec->memAccessWidth, core->aluOut);
+    fprintf(stderr, "cpu::memory_access::writeMem at 0x%08x (%hhu): 0x%08x\n", dec->memOffset, dec->memAccessWidth, core->aluOut);
     bus_write_single(core->bus, dec->memOffset, core->aluOut, dec->memAccessWidth);
+    if(core->bus->status != OK) {
+      switch(core->bus->status) {
+      case WRITE_MISALIGNED: cause_trap(core, STORE_ADDR_MISALIGNED); return;
+      case ADDRESS_NOT_FOUND: cause_trap(core, STORE_ACCESS_FAULT); return;
+      default: cause_trap(core, STORE_PAGE_FAULT); return;
+      }
+    }
   }
 }
 
@@ -464,20 +454,20 @@ void writeback(core_t *core)
 
 void trap(core_t *core)
 {
+#ifdef CPU_TRACE
+  fprintf(stderr, "cpu::cycle: TRAP @ 0x%08x trap_state=0x%2d cause=0x%02x\n", core->pc, core->trap_state, core->csr.mcause);
+#endif
   switch(core->trap_state) {
   case ENTER:
-#ifdef CPU_TRACE
-    fprintf(stderr, "cpu::cycle: TRAP @ 0x%08x\n", core->pc);
-#endif
-    assert(false);
-
     memcpy(core->trap_regs, core->registers, NUMREGS*sizeof(uint32_t));
     core->prefetch_cnt = 0;  // flush prefetch cache, since pc changes
     core->trap_pc = core->pc;
-    core->trap_state = EXIT;
-    core->pc = 0; // TODO: Trap vector not implemented
     core->pc = core->csr.mepc = core->pc;
-    core->state = FETCH;
+    core->state = TRAP;
+    core->trap_state = HANDLE;
+    break;
+
+  case HANDLE:
     core->trap_state = EXIT;
     break;
 

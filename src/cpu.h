@@ -286,8 +286,10 @@ typedef enum __attribute((packed)) _cpu_state_t {
 } core_state_t;
 
 typedef enum __attribute((packed)) _trap_state_t {
-  NONE = 0, ENTER, EXIT
+  NONE = 0, ENTER, HANDLE, EXIT
 } trap_state_t;
+
+struct _core_thread_args_t;
 
 typedef struct __attribute((packed)) _core_t {
   core_state_t state;
@@ -304,26 +306,31 @@ typedef struct __attribute((packed)) _core_t {
   bus_t       *bus;
   csr_t        csr;
 
-  uint32_t    trap_pc;
-  uint32_t    trap_regs[NUMREGS];
+  uint32_t     trap_pc;
+  uint32_t     trap_regs[NUMREGS];
 
-  uint8_t    prefetch_cnt:4; // for alignment/packing purposes
-  uint8_t     id:4;
-  bool        halted:1;
+  uint8_t      prefetch_cnt:4; // for alignment/packing purposes
+  uint8_t      id:4;
+  bool         halted:1;
   trap_state_t trap_state;
-  uint64_t    cycle;
+  uint64_t     cycle;
+
+  bool       (*trap_handler )(struct _core_thread_args_t *args);
 } core_t;
 
+
+typedef struct _core_thread_args_t {
+  struct _emulator_t *emulator;
+  core_t *core;
+} core_thread_args_t;
+
 typedef struct __attribute((packed)) _RV32I_t {
-  core_t      **cores;
-  pthread_t   *core_threads;
+  core_t      cores[NUMCORES];
   bus_t       *bus;
 } RV32I_cpu_t;
 
 RV32I_cpu_t	*cpu_init(bus_t *, uint32_t);
 core_t *	 core_init(RV32I_cpu_t *, uint32_t, uint32_t);
 void		 core_cycle(core_t *);
-void		 core_start(RV32I_cpu_t *, uint32_t);
-void		 core_join(RV32I_cpu_t *, uint32_t);
-
+void             core_dumpregs(core_t *);
 #endif

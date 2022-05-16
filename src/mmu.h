@@ -11,6 +11,13 @@ typedef enum _mperm_t {
   MPERM_RAW	= 8
 } mperm_t;
 
+typedef enum _mmu_state_t {
+  MMU_OK           = 0,
+  READ_PAGE_FAULT  = 1<<0,
+  WRITE_PAGE_FAULT = 1<<1,
+  ACCESS_DENIED    = 1<<2
+} mmu_state_t;
+
 typedef uint32_t vaddr_t;
     
 typedef struct _mmu_t {
@@ -20,6 +27,7 @@ typedef struct _mmu_t {
   void    *data;
   mperm_t *perm;
   bool    *dirty;
+  mmu_state_t state;
 } mmu_t;
 
 #define DIRTY_PAGE_SIZE 64

@@ -40,16 +40,31 @@ __attribute((__always_inline__))
 
   if(aw == WORD) {
     uint32_t ret = 0;
-    mmu_read_into(mmu, &ret, offs, sizeof(uint32_t));
-    return ret;
+    if(mmu_read_into(mmu, &ret, offs, sizeof(uint32_t)) == sizeof(uint32_t)) {
+#ifdef MEM_TRACE
+      fprintf(stderr, "memory::read_mmu::W 0x%08x => 0x%08x\n", offs, ret);
+#endif
+      return ret;
+    }
+    assert(mmu->state == MMU_OK);
   } else if(aw == HALFWORD) {
     uint16_t ret = 0;
-    mmu_read_into(mmu, &ret, offs, sizeof(uint16_t));
-    return ret;
+    if(mmu_read_into(mmu, &ret, offs, sizeof(uint16_t)) == sizeof(uint16_t)) {
+#ifdef MEM_TRACE
+            fprintf(stderr, "memory::read_mmu::H 0x%04x => 0x%04x\n", offs, ret);
+#endif
+      return ret;
+    }
+    assert(mmu->state == MMU_OK);
   } else if(aw == BYTE) {
     uint8_t ret = 0;
-    mmu_read_into(mmu, &ret, offs, sizeof(uint8_t));
-    return ret;
+    if(mmu_read_into(mmu, &ret, offs, sizeof(uint8_t)) == sizeof(uint8_t)) {
+#ifdef MEM_TRACE
+      fprintf(stderr, "memory::read_mmu::B 0x%02x => 0x%02x\n", offs, ret);
+#endif
+      return ret;
+    }
+    assert(mmu->state == MMU_OK);
   }
   assert(0==1);
 }
@@ -64,13 +79,31 @@ void write_ram(mmio_device_t *ram,
   //  fprintf(stderr, "memory::write_ram: %08x = %08x (%u)\n", offs, value, aw);
   if(aw == WORD) {
     assert((offs & 3) == 0);
-    mmu_write_from(mmu, (void*)&value, offs, sizeof(uint32_t));
+    if(mmu_write_from(mmu, (void*)&value, offs, sizeof(uint32_t)) == sizeof(uint32_t)) {
+#ifdef MEM_TRACE
+      fprintf(stderr, "memory::write_mmu::W 0x%08x => 0x%08x\n", offs, value);
+#endif
+      return;
+    }
+    assert(mmu->state == MMU_OK);
   } else if(aw == HALFWORD) {
     assert((offs & 1) == 0);
     uint16_t v16 = (uint32_t)value&0xffff;
-    mmu_write_from(mmu, (void*)&v16, offs, sizeof(uint16_t));
+    if(mmu_write_from(mmu, (void*)&v16, offs, sizeof(uint16_t)) == sizeof(uint32_t)) {
+#ifdef MEM_TRACE
+      fprintf(stderr, "memory::write_mmu::H 0x%08x => 0x%08x\n", offs, value);
+#endif
+      return;
+    }      
+    assert(mmu->state == MMU_OK);
   } else if(aw == BYTE) {
     uint8_t v8 = (uint32_t)value&0xff;
-    mmu_write_from(mmu, (void*)&v8, offs, sizeof(uint8_t));
+    if(mmu_write_from(mmu, (void*)&v8, offs, sizeof(uint8_t)) == sizeof(uint8_t)) {
+#ifdef MEM_TRACE
+      fprintf(stderr, "memory::write_mmu::H 0x%08x => 0x%08x\n", offs, value);
+#endif
+      return;
+    }      
+    assert(mmu->state == MMU_OK);
   }
 }

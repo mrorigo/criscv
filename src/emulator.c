@@ -6,6 +6,7 @@
 #include "emulator.h"
 #include "memory.h"
 #include "elf32.h"
+#include "syscall.h"
 
 
 mmio_device_t ram_device = {
@@ -98,36 +99,134 @@ bool emulator_load_elf(emulator_t *emu, const char *filename)
 }
 
 
+
+bool handle_umode_call(emulator_t *emu, core_t *core)
+{
+  const uint32_t syscall_num = core->registers[17]; // a7
+  const uint32_t arg0 = core->registers[10]; // a0
+  const uint32_t arg1 = core->registers[11]; // a1
+  const uint32_t arg2 = core->registers[12]; // a2
+  const uint32_t arg3 = core->registers[13]; // a3
+  const uint32_t arg4 = core->registers[14]; // a4
+  //  core_dumpregs(core);
+  return handle_syscall(emu, core, syscall_num, arg0, arg1, arg2, arg3, arg4);
+}
+
+
+bool trap_handler(core_thread_args_t *args)
+{
+  core_t *core = args->core;
+  emulator_t *emu = args->emulator;
+
+  switch(core->csr.mcause) {
+  case ENV_CALL_UMODE:
+    return handle_umode_call(emu, core);
+
+  case ILLEGAL_INSTRUCTION:
+    fprintf(stderr, "trap_handler::illegal instruction at 0x%08x \n", core->csr.mepc);
+    return false;
+    //  case LOAD_ADDR_MISALIGNED:
+    //  case STORE_ADDR_MISALIGNED:
+    //    return false;
+    
+  default:
+    fprintf(stderr, "trap_handler::unknown trap at 0x%08x: 0x%02x:0x%02x \n", core->csr.mepc,  core->csr.mcause, ENV_CALL_UMODE);
+    return false;
+    
+  }
+  return false;
+}
+
+void * cpu_thread(void *arg)
+{
+  core_thread_args_t *args = (core_thread_args_t *)arg;
+  //  emulator_t *emu = args->emulator;
+  core_t *core = args->core;
+  assert(core);
+
+  struct timespec spec;
+  clock_gettime(CLOCK_REALTIME, &spec);
+  uint64_t lastc = 0;
+  uint64_t start = spec.tv_sec * 1000 + spec.tv_nsec/1.0e6;
+  while(true) {
+    core_cycle(core);
+    if(core->state == TRAP && core->trap_state == HANDLE) {
+      fprintf(stderr, "cpu core: is trap: %d  handle: %d\n", core->state == TRAP, core->trap_state == HANDLE);
+      // Call from usermode (ECALL);
+      if(core->trap_handler != NULL) {
+	if(!core->trap_handler(args)) {
+	  fprintf(stderr, "cpu core: trap_handler returned false, core exiting\n");
+	  break; // stop cpu loop
+	}
+      } else {
+	  fprintf(stderr, "cpu core: trap_handler NOT defined, exiting\n");
+	  break;
+      }
+    }
+
+    if(core->cycle % (uint64_t)1e8 == 0) {
+      struct timespec spec;
+      uint64_t cycles = core->cycle / 5;
+
+      clock_gettime(CLOCK_REALTIME, &spec);
+      uint64_t end = spec.tv_sec * 1000 + spec.tv_nsec/1.0e6;
+      float mips = (float)(cycles-lastc) / ((float)(end-start));
+      fprintf(stderr, "mip/s: %2f\n", (mips/1e3));
+      start = end;
+      lastc = cycles;
+    }
+  }
+  return NULL;
+}
+
+
+void core_start(emulator_t *emu, uint32_t core_num)
+{
+  core_thread_args_t *args = &emu->core_thread_args[core_num];
+  args->emulator = emu;
+  args->core = &emu->cpu->cores[core_num];
+  pthread_create(&emu->core_threads[core_num],
+		 NULL,
+		 cpu_thread,
+		 args);
+}
+
+void core_join(emulator_t *emu, uint32_t core_num)
+{
+  pthread_join(emu->core_threads[core_num], NULL);
+}
+
+
 void emulator_run(emulator_t *emu)
 {
   fprintf(stderr, "initializing CPU\n");
-  RV32I_cpu_t *cpu = cpu_init(emu->bus, NUMCORES);
+  emu->cpu = cpu_init(emu->bus, NUMCORES);
 
   fprintf(stderr, "Initializing %d cores with pc 0x%08x\n", NUMCORES, emu->elf->entry);
   for(size_t i=0; i < NUMCORES; i++) {
+    core_t *core = &emu->cpu->cores[i];
     const vaddr_t stack = mmu_allocate_raw(emu->mmu, STACK_SIZE);
     const vaddr_t stack_top = stack + STACK_SIZE - sizeof(uint32_t)*2;
     fprintf(stderr, "Stack allocated at 0x%08x, top at 0%08x\n", stack, stack_top);
-    core_init(cpu, i, emu->elf->entry);
+    core_init(emu->cpu, i, emu->elf->entry);
     // return address lives in x1
-    cpu->cores[i]->registers[1] = 0x1337c0de;//emu->elf->entry;
+    core->registers[1] = 0x1337c0de;//emu->elf->entry;
 
     // stack lives in x2
-    cpu->cores[i]->registers[2] = stack_top;
-
-#define push(x) { vaddr_t sp = cpu->cores[i]->registers[X2] - sizeof(vaddr_t); bus_write_single(emu->bus, sp, 0, WORD); cpu->cores[i]->registers[X2] = sp; }
-
+    core->registers[2] = stack_top;
+    core->trap_handler = trap_handler;
+#define push(x) { vaddr_t sp = core->registers[X2] - sizeof(vaddr_t); bus_write_single(emu->bus, sp, 0, WORD); core->registers[X2] = sp; }
     push(0); // auxp
     push(0); // envp
     push(0); // argv null
-    // add args
+    // add argv[..]
     push(0); // argc 
 #undef push    
     
-    core_start(cpu, i);
+    core_start(emu, i);
   }
 
   for(size_t i=0; i < NUMCORES; i++) {
-    core_join(cpu, i);
+    core_join(emu, i);
   }
 }

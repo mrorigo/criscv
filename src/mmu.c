@@ -8,7 +8,7 @@
 
 void mmu_setperm(mmu_t *mmu, const vaddr_t vaddr, const size_t size, const mperm_t perm)
 {
-  fprintf(stderr, "mmu::setperm vaddr=0x%08x->0x%08lx, perm=0x%02x\n", vaddr, vaddr+size, perm);
+  fprintf(stderr, "mmu::setperm vaddr=0x%08x->0x%08lx, perm=0x%02x, size/aligned=0x%08zx/0x%08lx\n", vaddr, vaddr+size, perm, size, size);
   assert(vaddr >= mmu->base);
   assert(vaddr+size <= mmu->base+mmu->size);
   for(size_t i=vaddr-mmu->base; i < vaddr-mmu->base+size; i++) {
@@ -34,7 +34,7 @@ mmu_t *mmu_init(const vaddr_t base, const size_t size)
     free(mmu);
     return NULL;
   }
-  memset(mmu->data, 0xfa, size);
+  memset(mmu->data, 0x0, size);
 
   const size_t dirty_size = (size / DIRTY_PAGE_SIZE) + 1;
   mmu->dirty = malloc(dirty_size);
@@ -101,7 +101,6 @@ bool mmu_check_access(const mmu_t *mmu,
     }
     else {
       fprintf(stderr, "mmu::check_access: Access denied to memory at 0x%08x with permissions 0x%02x. Requested permission: 0x%02x\n", (unsigned int)i + mmu->base, p, perm);
-      assert(false);
       return false;
     }
   }
@@ -110,15 +109,24 @@ bool mmu_check_access(const mmu_t *mmu,
 
 int mmu_write_from(mmu_t *mmu, void *src, const vaddr_t vaddr, const size_t size_in_bytes)
 {
+  if(vaddr < mmu->base || vaddr + size_in_bytes > mmu->base + mmu->size) {
+    mmu->state = READ_PAGE_FAULT;
+    return -1;
+  }
   assert(vaddr >= mmu->base);
   assert(vaddr <= mmu->base + mmu->size );
   if(!mmu_check_access(mmu, vaddr, size_in_bytes, MPERM_WRITE)) {
-    return 0;
+    mmu->state = ACCESS_DENIED;
+    return -1;
   }
-  
+  if(vaddr == 0x0001edc4) {
+    mmu->state = MMU_OK;
+  }
+  mmu->state = MMU_OK;
   memcpy((uint8_t*)mmu->data + (vaddr - mmu->base), src, size_in_bytes);
 
   // Update perms
+  //  mmu_setperm(mmu, vaddr, size_in_bytes, MPERM_READ|(mmu->perm[vaddr-mmu->base] & MPERM_EXEC));
   for(size_t i = vaddr-mmu->base; i < vaddr-mmu->base+size_in_bytes; i++) {
     if((mmu->perm[i] & MPERM_RAW) == MPERM_RAW) {
       mmu->perm[i] |= MPERM_READ;
@@ -139,13 +147,22 @@ int mmu_read_into(mmu_t *mmu,
 		  vaddr_t vaddr,
 		  size_t size_in_bytes)
 {
-  assert(vaddr < mmu->base + mmu->size);
-  assert(mmu->base <= vaddr);
+  if(vaddr < mmu->base || vaddr + size_in_bytes > mmu->base + mmu->size) {
+    mmu->state = WRITE_PAGE_FAULT;
+    return -1;
+  }
+
+  if(vaddr == 0x0001edc4) {
+    mmu->state = MMU_OK;
+  }
+
   if(mmu_check_access(mmu, vaddr, size_in_bytes, MPERM_READ)) {
     memcpy(dst, (uint8_t*)mmu->data + (vaddr - mmu->base), size_in_bytes);
+    mmu->state = MMU_OK;
   } else {
     fprintf(stderr, "mmu::read_into from 0x%08x, size %zu, access denied!\n", vaddr, size_in_bytes);
-    assert(false);
+    mmu->state = ACCESS_DENIED;
+    return -1;
   }
   return size_in_bytes;
 }

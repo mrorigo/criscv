@@ -25,9 +25,17 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <pthread.h>
 #include "mmio.h"
 
+typedef enum _bus_status_t {
+  OK = 0,
+  READ_MISALIGNED   = 1,
+  WRITE_MISALIGNED  = 2,
+  ADDRESS_NOT_FOUND = 4,
+} bus_status_t;
+
 typedef struct _bus_t {
   mmio_device_t *mmio_devices;
   pthread_mutex_t mutex;
+  bus_status_t status;
 } bus_t;
 
 void     bus_init(bus_t *);
@@ -35,6 +43,8 @@ uint32_t bus_read_single(bus_t *, const size_t,  const memory_access_width_t);
 void     bus_write_single(bus_t *, const size_t, const uint32_t, const memory_access_width_t);
 
 void bus_read_multiple(bus_t *, const size_t, void *, size_t, const memory_access_width_t);
+void bus_write_multiple(bus_t *bus, const size_t offs, void *src, size_t count,
+                        const memory_access_width_t aw);
 
 void     bus_begin_write(bus_t *);
 void     bus_end_write(bus_t *);
