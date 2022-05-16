@@ -82,7 +82,6 @@ void cpu_thread(void *arg)
   uint64_t lastc = 0;
   uint64_t start = spec.tv_sec * 1000 + spec.tv_nsec/1.0e6;
   while(true) {
-    //core_dumpregs(core);
     core_cycle(core);
 
     if(core->cycle % (uint64_t)1e8 == 0) {
@@ -111,7 +110,7 @@ void core_join(RV32I_cpu_t *cpu, uint32_t core_num)
 
 void fetch(core_t *core)
 {
-  
+ 
   if(core->prefetch_cnt == 0) {
     bus_read_multiple(core->bus, core->pc, &core->instruction, PREFETCH_SIZE, WORD);
     core->prefetch_cnt = PREFETCH_SIZE-1;
@@ -119,11 +118,13 @@ void fetch(core_t *core)
     core->instruction = core->prefetch[PREFETCH_SIZE-1-core->prefetch_cnt];
     core->prefetch_cnt--;
   }
-  //  fprintf(stderr, "\ncpu::fetch pc=0x%08x, core->prefetch_cnt(%d) instr=0x%08x\n", core->pc, core->prefetch_cnt, core->instruction);
+#ifdef CPU_TRACE
+  fprintf(stderr, "\ncpu::fetch pc=0x%08x, core->prefetch_cnt(%d) instr=0x%08x\n", core->pc, core->prefetch_cnt, core->instruction);
+#endif
 }
 
-// We allow writes to ZERO, because REG_R handles this case
-#define REG_W(x, y) (core->registers[x] = (y))
+// We allow writes to ZERO, because REG_R handles this case (faster)
+#define REG_W(x, y) (core->registers[x] = (x == 0 ? 0 : y))
 #define REG_R(x) (x == 0 ? 0 : core->registers[x])
 
 void decode(core_t *core)
@@ -148,10 +149,12 @@ void decode(core_t *core)
   dec->funct3 = (i>>12) & 7;
   dec->shamt = (i>>20) & 31;
   dec->rd = (i>>7) & 31;
-  //  fprintf(stderr, "cpu::decode 0x%08x: opcode=0x%02x rs1=%x rs2=%x rd=%x f3=%1x %x\n", i, dec->opcode, dec->rs1, dec->rs2, dec->rd, (i & 0xf000)>>12, dec->funct3);
-
   dec->funct7 = 0;
-    
+
+#ifdef CPU_TRACE
+  fprintf(stderr, "cpu::decode rs1=%hhu(0x%08x)  rs2=%hhu  rd=%hhu\n", dec->rs1, dec->rs1v, dec->rs2, dec->rd);
+#endif
+
   switch(dec->optype) {
   case R:
     dec->funct7 = (i >> 25);
@@ -170,7 +173,6 @@ void decode(core_t *core)
     const uint32_t imm105 = (i >> 25) & 0b111111;
     const uint32_t imm41 = (i >> 8) & 0xf;
     const uint32_t imm11 = (i >> 7) & 1;
-
     const uint32_t bimm = (imm12 << 12) | (imm105 << 5) | (imm41 << 1) | (imm11 << 11);
 
     //imm12 is only 12 bits in struct, but we have 13 for branches, so to preserve
@@ -212,6 +214,12 @@ void decode(core_t *core)
 
 #define twos(x) (x >= 0x80000000) ? -(int32_t)(~x + 1) : x
 
+int add_wrap(int32_t x, int32_t y) {
+  int32_t res;
+  __builtin_add_overflow(x, y, &res);
+  return res;
+}
+
 void execute(core_t *core)
 {
   instr_t *dec = &core->decoded;
@@ -247,11 +255,17 @@ void execute(core_t *core)
     const uint32_t op = dec->opcode | (dec->funct3 << 7) | ((dec->funct7 >> 5)<<11);
     const int32_t se_imm12 = (dec->imm12<<20)>>20; // sign extend
     dec->writeRd = true;
+#ifdef CPU_TRACE
+    fprintf(stderr, "cpu::execute I-type, imm12/se=0x%08x/0x%08x\n", dec->imm12,se_imm12);
+#endif
 
     switch(op) {
     case OP_JALR:
       dec->isJump = true;
       core->aluOut = core->pc + sizeof(uint32_t);
+#ifdef CPU_TRACE
+      fprintf(stderr, "cpu::execute JALR, rs1=X%02d (0x%08x)\n", dec->rs1, dec->rs1v);
+#endif
       dec->jumpTarget = dec->rs1v + se_imm12;
       break;
     case OP_LB:
@@ -280,15 +294,19 @@ void execute(core_t *core)
       dec->readMem = true;
       break;
     case OP_ADDI: {
-      const int32_t t_imm12 = twos((uint32_t)se_imm12);
-      core->aluOut = (uint32_t)((int32_t)dec->rs1v + t_imm12);
+      //      const int32_t t_imm12 = twos((uint32_t)se_imm12);
+      //      const int32_t t_imm12 = ((uint32_t)se_imm12);
+      core->aluOut = add_wrap((int32_t)dec->rs1v, (int32_t)se_imm12);
+      #ifdef CPU_TRACE
+      fprintf(stderr, "cpu::execute ADDI  imm12/se: 0x%08x/0x%08x => 0x%08x\n", dec->imm12, se_imm12, core->aluOut);
+      #endif
       break;
     }
     case OP_SLTI:  core->aluOut = (int32_t)dec->rs1v < (int32_t)se_imm12 ? 1 : 0;  break;
     case OP_SLTIU: core->aluOut = dec->rs1v < (uint32_t)se_imm12 ? 1 : 0;          break;
-    case OP_XORI:  core->aluOut = dec->rs1v ^ se_imm12 ? 1 : 0;			   break;
-    case OP_ORI:   core->aluOut = dec->rs1v | (se_imm12&0xfff) ? 1 : 0;		   break;
-    case OP_ANDI:  core->aluOut = dec->rs1v & se_imm12 ? 1 : 0;			   break;
+    case OP_XORI:  core->aluOut = dec->rs1v ^ se_imm12;			   break;
+    case OP_ORI:   core->aluOut = dec->rs1v | (se_imm12&0xfff);		   break;
+    case OP_ANDI:  core->aluOut = dec->rs1v & se_imm12;			   break;
     case OP_SLLI:  core->aluOut = dec->rs1v << dec->shamt;			   break;
     case OP_SRLI:  core->aluOut = dec->rs1v >> dec->shamt;			   break;
     case OP_SRAI:  core->aluOut = ((int32_t)dec->rs1v) >> dec->shamt;		   break;
@@ -349,7 +367,11 @@ void execute(core_t *core)
     case OP_AUIPC & 0x7f: {
       const int32_t m = 1 << (20 -1);
       const int32_t se_imm20 = (dec->imm20 ^ m) - m;
-      core->aluOut = se_imm20 + core->pc;
+      core->aluOut = (se_imm20<<12) + core->pc;
+#ifdef CPU_TRACE
+      fprintf(stderr, "cpu::exec AUIPC  pc=0x%08x imm20/se: 0x%08x 0x%08x => 0x%08x\n",
+	      core->pc, dec->imm20, se_imm20, core->aluOut);
+#endif
       break;
     }
     default:
@@ -365,8 +387,16 @@ void execute(core_t *core)
     switch(dec->opcode) {
     case OP_JAL & 0x7f: {
       //      const uint32_t se_imm21 = dec->imm20; //(int32_t)((dec->imm20<<12)>>11);
-      dec->jumpTarget = core->pc + (dec->imm20<<1);
-      //fprintf(stderr, "JAL jumpTarget: 0x%08x imm20: 0x%08x\n", dec->jumpTarget, dec->imm20);
+      //      dec->jumpTarget = core->pc + (dec->imm20<<1);
+
+      const int32_t m = 1 << (20 -1);
+      const int32_t se_imm20 = (dec->imm20 ^ m) - m;
+      dec->jumpTarget = (se_imm20<<1) + core->pc;
+
+      core->aluOut = core->pc + sizeof(vaddr_t);
+#ifdef CPU_TRACE
+      fprintf(stderr, "JAL jumpTarget: 0x%08x imm20/se: 0x%08x/0x%08x \n", dec->jumpTarget, dec->imm20, se_imm20);
+#endif
       break;
     }
     default:
@@ -418,18 +448,27 @@ void writeback(core_t *core)
   }
 
   if(dec->isJump) {
+#ifdef CPU_TRACE
+    fprintf(stderr, "cpu::writeback jumptarget=0x%08x\n", dec->jumpTarget);
+#endif
     core->pc = dec->jumpTarget;
     core->prefetch_cnt = 0; // flush prefetch cache
   } else {
     core->pc += sizeof(uint32_t);
   }
+
+#ifdef CPU_TRACE
+  core_dumpregs(core);
+#endif
 }
 
 void trap(core_t *core)
 {
   switch(core->trap_state) {
   case ENTER:
+#ifdef CPU_TRACE
     fprintf(stderr, "cpu::cycle: TRAP @ 0x%08x\n", core->pc);
+#endif
     assert(false);
 
     memcpy(core->trap_regs, core->registers, NUMREGS*sizeof(uint32_t));
@@ -472,5 +511,6 @@ void core_cycle(core_t *core)
   case MEMORY:    _stage(memory_access, WRITEBACK);  break;
   case WRITEBACK: _stage(writeback, FETCH);          break;
   }
+
 }
 #undef _stage

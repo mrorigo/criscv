@@ -1,12 +1,15 @@
 #ifndef __CONFIG_H__
 #define __CONFIG_H__
 
-#define PREFETCH_SIZE 4
+//#define CPU_TRACE 1
+
+#define PREFETCH_SIZE 1
 #define NUMCORES 1
 
-#define RAM_SIZE 1024 * 1000 * 4 // 4mb
+#define RAM_SIZE 1024 * 100 * 4 // 4mb
 
-#define RAM_START 0x20000000
+//#define RAM_START 0x20000000
+#define RAM_START (0x10000)
 
 #define ARGV_SIZE 1024
 #define STACK_SIZE (1<<12)  // 16kb is enough for everyone
