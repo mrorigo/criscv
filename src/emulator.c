@@ -119,7 +119,7 @@ bool trap_handler(core_thread_args_t *args)
   core_t *core = args->core;
   emulator_t *emu = args->emulator;
 
-  fprintf(stderr, "emu::trap_handler::TRAP at 0x%08x: cause=0x%02x \n", core->csr.mepc,  core->csr.mcause);
+  //  fprintf(stderr, "emu::trap_handler::TRAP at 0x%08x: cause=0x%02x \n", core->csr.mepc,  core->csr.mcause);
 
   switch(core->csr.mcause) {
   case ENV_CALL_UMODE:
@@ -221,7 +221,7 @@ void emulator_run(emulator_t *emu)
   for(size_t i=0; i < NUMCORES; i++) {
     core_t *core = &emu->cpu->cores[i];
     const vaddr_t stack = mmu_allocate_raw(emu->mmu, STACK_SIZE);
-    const vaddr_t stack_top = stack + STACK_SIZE - sizeof(uint32_t)*2;
+    const vaddr_t stack_top = stack + STACK_SIZE;
     fprintf(stderr, "Stack allocated at 0x%08x, top at 0%08x\n", stack, stack_top);
     core_init(emu->cpu, i, emu->elf->entry);
     // return address lives in x1
@@ -230,12 +230,12 @@ void emulator_run(emulator_t *emu)
     // stack lives in x2
     core->registers[2] = stack_top;
     core->trap_handler = trap_handler;
-#define push(x) { vaddr_t sp = core->registers[X2] - sizeof(vaddr_t); bus_write_single(emu->bus, sp, 0, WORD); core->registers[X2] = sp; }
+#define push(x) { vaddr_t sp = core->registers[X2] - sizeof(uint32_t); bus_write_single(emu->bus, sp, x, WORD); core->registers[X2] = sp; }
     push(0); // auxp
     push(0); // envp
     push(0); // argv null
     // add argv[..]
-    push(0); // argc 
+    push(42); // argc 
 #undef push    
     
     core_start(emu, i);
