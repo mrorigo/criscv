@@ -17,9 +17,13 @@ bool handle_syscall(emulator_t *emu,
     return false;
     //  case SYS_close:
     //    return true;
-  case SYS_brk:
-    
-    return false;
+  case SYS_brk: {
+    // arg1 is either 0, or the offset wanted
+    vaddr_t res = mmu_allocate(emu->mmu, arg1, MPERM_RAW|MPERM_WRITE);
+    fprintf(stderr, "syscall::brk res=0x%08x\n", res);
+    core->trap_regs[15] = res;
+    return true;
+  }
     break;
   case SYS_write: // write
     assert(arg0 == 1);
