@@ -79,9 +79,12 @@ void cause_trap(core_t *core, trap_cause_t cause) {
 
 void fetch(core_t *core)
 {
- 
   if(core->prefetch_cnt == 0) {
     bus_read_multiple(core->bus, core->pc, &core->instruction, PREFETCH_SIZE, WORD);
+    if(core->bus->status != OK) {
+      cause_trap(core, core->bus->status == READ_MISALIGNED ? INSTRUCTION_ADDR_MISALIGN : INSTRUCTION_ACCESS_FAULT);
+      return;
+    }
     core->prefetch_cnt = PREFETCH_SIZE-1;
   } else {
     core->instruction = core->prefetch[PREFETCH_SIZE-1-core->prefetch_cnt];
@@ -274,9 +277,9 @@ void execute(core_t *core)
     }
     case OP_SLTI:  core->aluOut = (int32_t)dec->rs1v < (int32_t)se_imm12 ? 1 : 0;  break;
     case OP_SLTIU: core->aluOut = dec->rs1v < (uint32_t)se_imm12 ? 1 : 0;          break;
-    case OP_XORI:  core->aluOut = dec->rs1v ^ se_imm12;			   break;
-    case OP_ORI:   core->aluOut = dec->rs1v | (se_imm12&0xfff);		   break;
-    case OP_ANDI:  core->aluOut = dec->rs1v & se_imm12;			   break;
+    case OP_XORI:  core->aluOut = dec->rs1v ^ se_imm12;			           break;
+    case OP_ORI:   core->aluOut = dec->rs1v | (se_imm12&0xfff);		           break;
+    case OP_ANDI:  core->aluOut = dec->rs1v & se_imm12;			           break;
     case OP_SLLI:  core->aluOut = dec->rs1v << dec->shamt;			   break;
     case OP_SRLI:  core->aluOut = dec->rs1v >> dec->shamt;			   break;
     case OP_SRAI:  core->aluOut = ((int32_t)dec->rs1v) >> dec->shamt;		   break;
@@ -291,6 +294,11 @@ void execute(core_t *core)
     const int32_t t_imm12 = twos((uint32_t)se_imm12);
     dec->writeMem = true;
     dec->memOffset = dec->rs1v + t_imm12;
+
+#ifdef CPU_TRACE
+    fprintf(stderr, "cpu::execute S-type memOffset=0x%08x\n", dec->memOffset);
+#endif
+
     switch(op) {
     case OP_SB: {
       dec->memAccessWidth = BYTE;
@@ -314,15 +322,18 @@ void execute(core_t *core)
 
   case B: {
     const uint32_t op = (dec->opcode | (dec->funct3 << 7));
-    const int32_t se_imm12 = (int32_t)((dec->imm12<<21)>>20);
+    const int32_t se_imm12 = (int32_t)((dec->imm12<<20)>>19);
+    #ifdef CPU_TRACE
+    fprintf(stderr, "cpu::execute B-type: func3=0x%1x, imm12/se: 0x%04x/0x%05x\n", dec->funct3, dec->imm12, se_imm12);
+    #endif
     dec->jumpTarget = core->pc + se_imm12;
     switch(op) {
     case OP_BEQ:  core->aluOut = dec->rs1v == dec->rs2v ? 1 : 0;                  break;
     case OP_BNE:  core->aluOut = dec->rs1v != dec->rs2v ? 1 : 0;                  break;
     case OP_BLT:  core->aluOut = (int32_t)dec->rs1v < (int32_t)dec->rs2v ? 1 : 0; break;
     case OP_BLTU: core->aluOut = dec->rs1v < dec->rs2v ? 1 : 0;                   break;
-    case OP_BGE:  core->aluOut = (int32_t)dec->rs1v > (int32_t)dec->rs2v ? 1 : 0; break;
-    case OP_BGEU: core->aluOut = dec->rs1v > dec->rs2v ? 1 : 0;                   break;
+    case OP_BGE:  core->aluOut = (int32_t)dec->rs1v >= (int32_t)dec->rs2v ? 1 : 0; break;
+    case OP_BGEU: core->aluOut = dec->rs1v >= dec->rs2v ? 1 : 0;                   break;
     }
     dec->isJump = core->aluOut == 1;
     break;
@@ -406,17 +417,27 @@ void memory_access(core_t *core)
 {
   const instr_t *dec = &core->decoded;
   if(dec->readMem) {
+#ifdef MEM_TRACE
+    fprintf(stderr, "cpu::memory_access::readMem at 0x%08x (%hhu) => ", dec->memOffset, dec->memAccessWidth);
+#endif
     core->aluOut = bus_read_single(core->bus, dec->memOffset, dec->memAccessWidth);
     if(core->bus->status != OK) {
+#ifdef MEM_TRACE
+      fprintf(stderr, " ERROR\n");
+#endif
       switch(core->bus->status) {
       case READ_MISALIGNED: cause_trap(core, LOAD_ADDR_MISALIGNED); return;
       case ADDRESS_NOT_FOUND: cause_trap(core, LOAD_ACCESS_FAULT); return;
       default: cause_trap(core, LOAD_PAGE_FAULT); return;
       }
     }
-    fprintf(stderr, "cpu::memory_access::readMem at 0x%08x (%hhu) => 0x%08x", dec->memOffset, dec->memAccessWidth, core->aluOut);
+#ifdef MEM_TRACE
+    fprintf(stderr, "0x%08x\n", core->aluOut);
+#endif
   } else if(dec->writeMem) {
+#ifdef MEM_TRACE
     fprintf(stderr, "cpu::memory_access::writeMem at 0x%08x (%hhu): 0x%08x\n", dec->memOffset, dec->memAccessWidth, core->aluOut);
+#endif
     bus_write_single(core->bus, dec->memOffset, core->aluOut, dec->memAccessWidth);
     if(core->bus->status != OK) {
       switch(core->bus->status) {
