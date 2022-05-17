@@ -15,7 +15,8 @@ mmio_device_t ram_device = {
   .size		= RAM_SIZE,
   .perm         = READ|WRITE|EXEC,
   .init		= init_ram,
-  .read		= read_ram,
+  .read_single	= read_ram_single,
+  .read         = read_ram,
   .write	= write_ram
 };
 
@@ -118,19 +119,34 @@ bool trap_handler(core_thread_args_t *args)
   core_t *core = args->core;
   emulator_t *emu = args->emulator;
 
+  fprintf(stderr, "emu::trap_handler::TRAP at 0x%08x: cause=0x%02x \n", core->csr.mepc,  core->csr.mcause);
+
   switch(core->csr.mcause) {
   case ENV_CALL_UMODE:
     return handle_umode_call(emu, core);
 
   case ILLEGAL_INSTRUCTION:
-    fprintf(stderr, "trap_handler::illegal instruction at 0x%08x \n", core->csr.mepc);
+    fprintf(stderr, "emu::trap_handler::ILLEGAL_INSTRUCTION @ 0x%08x \n", core->csr.mepc);
     return false;
     //  case LOAD_ADDR_MISALIGNED:
     //  case STORE_ADDR_MISALIGNED:
     //    return false;
-    
+  case INSTRUCTION_ADDR_MISALIGN:
+    fprintf(stderr, "emu::trap_handler::INSTRUCTION_ADDR_MISALIGN @ 0x%08x \n", core->csr.mepc);
+    return false;
+  case INSTRUCTION_ACCESS_FAULT:
+    fprintf(stderr, "emu::trap_handler::INSTRUCTION_ACCESS_FAULT @ 0x%08x \n", core->csr.mepc);
+    return false;
+  case LOAD_ACCESS_FAULT:
+    fprintf(stderr, "emu::trap_handler::LOAD_ACCESS_FAULT @ 0x%08x \n", core->csr.mepc);
+    return false;
+
+  case STORE_ACCESS_FAULT:
+    fprintf(stderr, "emu::trap_handler::STORE_ACCESS_FAULT @ 0x%08x \n", core->csr.mepc);
+    return false;
+
   default:
-    fprintf(stderr, "trap_handler::unknown trap at 0x%08x: 0x%02x:0x%02x \n", core->csr.mepc,  core->csr.mcause, ENV_CALL_UMODE);
+    fprintf(stderr, "emu::trap_handler::UNKNOWN TRAP @ 0x%08x: cause=0x%02x \n", core->csr.mepc,  core->csr.mcause);
     return false;
     
   }
@@ -151,7 +167,6 @@ void * cpu_thread(void *arg)
   while(true) {
     core_cycle(core);
     if(core->state == TRAP && core->trap_state == HANDLE) {
-      fprintf(stderr, "cpu core: is trap: %d  handle: %d\n", core->state == TRAP, core->trap_state == HANDLE);
       // Call from usermode (ECALL);
       if(core->trap_handler != NULL) {
 	if(!core->trap_handler(args)) {
