@@ -100,7 +100,7 @@ uint32_t bus_read_single(bus_t *bus, const size_t offs, const memory_access_widt
     bus_end_read(bus);
     return 0x0badc0de;
   }
-  uint32_t r = dev->read(dev, offs, aw);
+  uint32_t r = dev->read_single(dev, offs, aw);
   bus_end_read(bus);
   return r;
 }
@@ -115,33 +115,34 @@ void bus_read_multiple(bus_t *bus, const size_t offs, void *dst, size_t count, c
   }
   size_t o = offs;
 
-  // fast path for instruction prefetch
+#if PREFETCH_SIZE == 4  // fast path for instruction prefetch 4
   if(aw == WORD && count == 4) {
     uint32_t *ptr = (uint32_t *)dst;
-    ptr[0] = dev->read(dev, o, aw);
-    ptr[1] = dev->read(dev, o+4, aw);
-    ptr[2] = dev->read(dev, o+8, aw);
-    ptr[3] = dev->read(dev, o+12, aw);
+    ptr[0] = dev->read_single(dev, o, aw);
+    ptr[1] = dev->read_single(dev, o+4, aw);
+    ptr[2] = dev->read_single(dev, o+8, aw);
+    ptr[3] = dev->read_single(dev, o+12, aw);
     bus_end_read(bus);
     return;
  }
-
+#endif
+  
   if(aw == WORD) {
     uint32_t *ptr = (uint32_t *)dst;
     for(size_t i=0; i < count; i++) {
-      ptr[i] = dev->read(dev, o, aw);
+      ptr[i] = dev->read_single(dev, o, aw);
       o += 4;
     }
   } else if(aw == HALFWORD) {
     uint16_t *ptr = (uint16_t *)dst;
     for(size_t i=0; i < count; i++) {
-      ptr[i] = dev->read(dev, o, aw);
+      ptr[i] = dev->read_single(dev, o, aw);
       o += 2;
     }
   } else  if(aw == BYTE) {
     uint8_t *ptr = (uint8_t *)dst;
     for(size_t i=0; i < count; i++) {
-      ptr[i] = dev->read(dev, o, aw);
+      ptr[i] = dev->read_single(dev, o, aw);
       o += 1;
     }
   }

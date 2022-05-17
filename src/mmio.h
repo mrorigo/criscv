@@ -22,7 +22,8 @@ typedef struct _mmio_device_t {
   mmio_perm_t perm;
 
   void     (*init )(struct _mmio_device_t *device);
-  uint32_t (*read )(const struct _mmio_device_t *device, const uint32_t offs, const memory_access_width_t aw);
+  uint32_t (*read_single )(const struct _mmio_device_t *device, const uint32_t offs, const memory_access_width_t aw);
+  size_t   (*read )(const struct _mmio_device_t *device, void *buf, const uint32_t offs, size_t size, const memory_access_width_t aw);
   void     (*write)(struct _mmio_device_t *device, const uint32_t offs, const uint32_t value, const memory_access_width_t aw);
 
 } mmio_device_t;

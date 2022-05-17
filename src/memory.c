@@ -33,8 +33,13 @@ void init_ram(mmio_device_t *ram)
   // Nothing much to do here..
 }
 
+size_t read_ram(const struct _mmio_device_t *device, void *buf, const uint32_t offs, size_t size, const memory_access_width_t aw)
+{
+  assert(false);
+}
+
 __attribute((__always_inline__))
-  uint32_t read_ram(const mmio_device_t *ram, const vaddr_t offs, const memory_access_width_t aw)
+  uint32_t read_ram_single(const mmio_device_t *ram, const vaddr_t offs, const memory_access_width_t aw)
 {
   mmu_t *mmu = (mmu_t *)ram->user;
 
@@ -100,7 +105,7 @@ void write_ram(mmio_device_t *ram,
     uint8_t v8 = (uint32_t)value&0xff;
     if(mmu_write_from(mmu, (void*)&v8, offs, sizeof(uint8_t)) == sizeof(uint8_t)) {
 #ifdef MEM_TRACE
-      fprintf(stderr, "memory::write_mmu::H 0x%08x => 0x%08x\n", offs, value);
+      fprintf(stderr, "memory::write_mmu::B 0x%08x => 0x%08x\n", offs, value);
 #endif
       return;
     }      
