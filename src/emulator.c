@@ -1,5 +1,6 @@
 
 #include <stdio.h>
+#include <string.h>
 #include <stdlib.h>
 #include <assert.h>
 #include "config.h"
@@ -212,7 +213,7 @@ void core_join(emulator_t *emu, uint32_t core_num)
 }
 
 
-void emulator_run(emulator_t *emu)
+void emulator_run(emulator_t *emu, const char *argv1)
 {
   fprintf(stderr, "initializing CPU\n");
   emu->cpu = cpu_init(emu->bus, NUMCORES);
@@ -227,6 +228,14 @@ void emulator_run(emulator_t *emu)
     // return address lives in x1
     core->registers[1] = 0x1337c0de;//emu->elf->entry;
 
+    // Allocate argv[1]
+    const char *argv0 = "./program_name\0";
+    vaddr_t av0 = mmu_allocate(emu->mmu, strlen(argv0)+1, MPERM_RAW|MPERM_WRITE);
+    bus_write_multiple(emu->bus, av0, (void*)argv0, strlen(argv0)+1, BYTE);
+    //    const char *argv1 = "this_is_argv1\0";
+    vaddr_t av1 = mmu_allocate(emu->mmu, strlen(argv1)+1, MPERM_RAW|MPERM_WRITE);
+    bus_write_multiple(emu->bus, av1, (void*)argv1, strlen(argv1)+1, BYTE);
+
     // stack lives in x2
     core->registers[2] = stack_top;
     core->trap_handler = trap_handler;
@@ -234,6 +243,8 @@ void emulator_run(emulator_t *emu)
     push(0); // auxp
     push(0); // envp
     push(0); // argv null
+    push(av1); // argv[1] null
+    push(av0); // argv[0]
     // add argv[..]
     push(42); // argc 
 #undef push    

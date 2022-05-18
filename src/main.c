@@ -33,7 +33,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "csr.h"
 #include "cpu.h"
 
-int main(int argc, char **argv)
+int main(int argc, const char **argv)
 {
   (void)argc;
 
@@ -41,5 +41,5 @@ int main(int argc, char **argv)
 
   emulator_load_elf(emul, argv[1]);
   
-  emulator_run(emul);
+  emulator_run(emul, argv[2]);
 }

@@ -20,6 +20,6 @@ typedef struct _emulator_t {
 
 emulator_t *emulator_init();
 bool emulator_load_elf(emulator_t *emu, const char *filename);
-void emulator_run(emulator_t *emu);
+void emulator_run(emulator_t *emu, const char *argv1);
 
 #endif
