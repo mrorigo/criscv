@@ -3,11 +3,12 @@
 
 //#define CPU_TRACE 1
 //#define MEM_TRACE 1
+//#define SYSCALL_TRACE 1
 
 #define PREFETCH_SIZE 1
 #define NUMCORES 1
 
-#define RAM_SIZE 1024 * 100 * 4 // 4mb
+#define RAM_SIZE 1024 * 1000 * 4 // 4mb
 
 #define RAM_START (0x10000)
 
