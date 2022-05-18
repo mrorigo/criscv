@@ -92,6 +92,19 @@ void bus_end_read(bus_t *bus)
   bus_unlock_read(bus);
 }
 
+size_t bus_read_string(bus_t *bus, const size_t offs, char *dst)
+{
+  char c = 0;
+  size_t i = 0;
+  *dst = 0;
+  do {
+    c = bus_read_single(bus, offs+i, BYTE);
+    dst[i++] = c;
+  } while(c != 0 && bus->status == OK);
+
+  return i;
+}
+
 uint32_t bus_read_single(bus_t *bus, const size_t offs, const memory_access_width_t aw)
 {
   bus_begin_read(bus);

@@ -46,6 +46,8 @@ void bus_read_multiple(bus_t *, const size_t, void *, size_t, const memory_acces
 void bus_write_multiple(bus_t *bus, const size_t offs, void *src, size_t count,
                         const memory_access_width_t aw);
 
+size_t   bus_read_string(bus_t *bus, const size_t offs, char *dst);
+
 void     bus_begin_write(bus_t *);
 void     bus_end_write(bus_t *);
 
