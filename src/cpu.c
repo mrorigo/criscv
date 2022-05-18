@@ -60,7 +60,7 @@ core_t *core_init(RV32I_cpu_t *cpu, uint32_t core_num, uint32_t initial_pc)
 
 void core_dumpregs(core_t *core)
 {
-  fprintf(stderr, "pc=0x%08x ", core->pc);
+  fprintf(stderr, "pc=0x%08x  mepc=0x%08x\n", core->pc, core->csr.mepc);
   for(size_t i = 0 ; i < NUMREGS; i++) {
     fprintf(stderr, "X%02zu: 0x%08x ", i, core->registers[i]);
     if(i % 4 == 3) {
