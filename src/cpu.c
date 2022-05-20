@@ -184,8 +184,6 @@ void decode(core_t *core)
 }
 
 
-#define twos(x) (x >= 0x80000000) ? -(int32_t)(~x + 1) : x
-
 int add_wrap(int32_t x, int32_t y) {
   int32_t res;
   __builtin_add_overflow(x, y, &res);
@@ -267,8 +265,6 @@ void execute(core_t *core)
       #endif
       break;
     case OP_ADDI: {
-      //      const int32_t t_imm12 = twos((uint32_t)se_imm12);
-      //      const int32_t t_imm12 = ((uint32_t)se_imm12);
       core->aluOut = add_wrap((int32_t)dec->rs1v, (int32_t)se_imm12);
       #ifdef CPU_TRACE
       fprintf(stderr, "cpu::execute ADDI  imm12/se: 0x%08x/0x%08x => 0x%08x\n", dec->imm12, se_imm12, core->aluOut);
@@ -291,9 +287,8 @@ void execute(core_t *core)
   case S: {
     const uint32_t op = dec->opcode | (dec->funct3 << 7);
     const int32_t se_imm12 = (dec->imm12<<20)>>20;
-    const int32_t t_imm12 = twos((uint32_t)se_imm12);
     dec->writeMem = true;
-    dec->memOffset = dec->rs1v + t_imm12;
+    dec->memOffset = dec->rs1v + se_imm12;
 
 #ifdef CPU_TRACE
     fprintf(stderr, "cpu::execute S-type memOffset=0x%08x\n", dec->memOffset);
