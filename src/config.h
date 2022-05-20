@@ -5,7 +5,7 @@
 //#define MEM_TRACE 1
 //#define SYSCALL_TRACE 1
 
-#define PREFETCH_SIZE 1
+#define PREFETCH_SIZE 4
 #define NUMCORES 1
 
 #define RAM_SIZE 1024 * 1000 * 4 // 4mb
