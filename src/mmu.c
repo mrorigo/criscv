@@ -57,6 +57,30 @@ mmu_t *mmu_init(const vaddr_t base, const size_t size)
   return mmu;
 }
 
+bool mmu_add_memory(mmu_t *mmu, const vaddr_t addr, size_t size, mperm_t perm)
+{
+  if(addr < mmu->base) {
+    assert(0 && "can not extend memory segment");
+    return false;
+  }
+  if(addr + size > mmu->base + mmu->size) {
+    // Extend the current memory segment
+    const size_t new_size = (addr+size) - mmu->base;
+    void * new_data = realloc(mmu->data, new_size);
+    if(new_data == NULL) {
+      assert(new_data);
+      return false;
+    }
+    mmu->data = new_data;
+    mmu->size = new_size;
+  } else {
+    // extend the curr_vaddr beyond addr+size
+    mmu->curr_vaddr = addr + size;
+  }
+  mmu_setperm(mmu, addr, size, perm);
+  return true;
+}
+
 // Allocate a block of memory with specific access permissions
 vaddr_t mmu_allocate(mmu_t *mmu, const size_t size, mperm_t perm)
 {

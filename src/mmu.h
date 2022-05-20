@@ -5,9 +5,9 @@
 #include <sys/types.h>
 
 typedef enum _mperm_t {
-  MPERM_READ	= 1,
+  MPERM_EXEC	= 1,
   MPERM_WRITE	= 2,
-  MPERM_EXEC	= 4,
+  MPERM_READ	= 4,
   MPERM_RAW	= 8
 } mperm_t;
 
@@ -37,6 +37,7 @@ bool     mmu_check_access(const mmu_t *,
 			  const size_t,
 			  const mperm_t);
 mmu_t	*mmu_init(const vaddr_t, const size_t);
+bool     mmu_add_memory(mmu_t *mmu, const vaddr_t addr, size_t size, mperm_t perm);
 vaddr_t	 mmu_allocate(mmu_t *, const size_t, mperm_t);
 vaddr_t	 mmu_allocate_raw(mmu_t *, const size_t);
 int	 mmu_write_from(mmu_t *, void *, vaddr_t, size_t);
