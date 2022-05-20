@@ -6,29 +6,6 @@
 #include <sys/types.h>
 #include "elf32.h"
 
-static size_t get_total_page_aligned_size(const uint8_t *elf_start)
-{
-  Elf32_Ehdr *hdr = (Elf32_Ehdr *) elf_start;
-  assert(hdr->e_ident[EI_CLASS] == 1);
-  assert(hdr->e_ident[EI_DATA] == 1);
-  Elf32_Shdr *shdr = (Elf32_Shdr *)(elf_start + hdr->e_shoff);
-
-  vaddr_t min_vaddr = 0x7fffffff;
-  vaddr_t max_vaddr = 0x0;
-
-  for(size_t i=0; i < hdr->e_shnum; ++i) {
-    if(shdr[i].sh_addr != 0) {
-      min_vaddr = shdr[i].sh_addr < min_vaddr ? shdr[i].sh_addr : min_vaddr;
-      max_vaddr = shdr[i].sh_addr + shdr[i].sh_size > max_vaddr ?
-	shdr[i].sh_addr + shdr[i].sh_size : max_vaddr;
-    }
-  }
-  fprintf(stderr, "min_vaddr: 0x%08x  max_vaddr: 0x%08x\n", min_vaddr, max_vaddr);
-  const size_t page_aligned_virt_size = (((max_vaddr - min_vaddr)>>12) + 1)<<12;
-
-  return page_aligned_virt_size;
-}
-
 Elf32 *elf_load (const uint8_t *elf_start, mmu_t *mmu)
 {
   Elf32 *elf = malloc(sizeof(Elf32));
@@ -40,10 +17,7 @@ Elf32 *elf_load (const uint8_t *elf_start, mmu_t *mmu)
   Elf32_Ehdr *hdr = (Elf32_Ehdr *) elf_start;
   assert(hdr->e_ident[EI_CLASS] == 1);
   assert(hdr->e_ident[EI_DATA] == 1);
-  //  Elf32_Shdr *shdr = (Elf32_Shdr *)(elf_start + hdr->e_shoff);
   Elf32_Phdr *phdr = (Elf32_Phdr *)(elf_start + hdr->e_phoff);
-  //  const Elf32_Shdr *sh_strtab = &shdr[hdr->e_shstrndx];
-  //  const char *const sh_strtab_p = elf_start + sh_strtab->sh_offset;
 
   // Load program into memory
   for(int i=0; i < hdr->e_phnum; i++) {

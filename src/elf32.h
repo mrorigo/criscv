@@ -134,14 +134,7 @@ typedef struct {
 } Elf32_Shdr;
 
 typedef struct _Elf32 {
-  vaddr_t load;
-  vaddr_t base;
   vaddr_t entry;
-  vaddr_t init_array;
-  uint32_t init_count;
-  vaddr_t fini_array;
-  uint32_t fini_count;
-  vaddr_t global_pointer;
 } Elf32;
 
 Elf32 *elf_load(const unsigned char *elf_start, mmu_t *emu);
