@@ -69,13 +69,11 @@ void core_dumpregs(core_t *core)
   }
 }
 
-
 void cause_trap(core_t *core, trap_cause_t cause) {
   core->state = TRAP;
   core->trap_state = ENTER;
   core->csr.mcause = cause;
 }
-
 
 void fetch(core_t *core)
 {
@@ -130,6 +128,7 @@ void decode(core_t *core)
   case C:
     // TODO
     break;
+
   case R:
     dec->funct7 = (i >> 25);
     break;
@@ -364,9 +363,6 @@ void execute(core_t *core)
     dec->writeRd = true;
     switch(dec->opcode) {
     case OP_JAL & 0x7f: {
-      //      const uint32_t se_imm21 = dec->imm20; //(int32_t)((dec->imm20<<12)>>11);
-      //      dec->jumpTarget = core->pc + (dec->imm20<<1);
-
       const int32_t m = 1 << (20 -1);
       const int32_t se_imm20 = (dec->imm20 ^ m) - m;
       dec->jumpTarget = (se_imm20<<1) + core->pc;
@@ -392,8 +388,6 @@ void execute(core_t *core)
       break;
     }
     default:
-    //    switch(dec->funct3) {
-    //    }
       fprintf(stderr, "opcode: 0x%08x\n", dec->opcode);
       assert(dec->optype != C);
       break;
@@ -404,8 +398,6 @@ void execute(core_t *core)
   case Unknown:
     // Illegal instruction trap
     cause_trap(core, ILLEGAL_INSTRUCTION);
-
-    //    assert(false);
     break;
   }
 }
@@ -445,7 +437,6 @@ void memory_access(core_t *core)
     }
   }
 }
-
 
 void writeback(core_t *core)
 {
@@ -503,7 +494,7 @@ void trap(core_t *core)
   }
 }
 
-
+// All stages, except TRAP, can set TRAP state
 #define _stage(stage, next) stage(core); \
   core->cycle++; \
   core->state = core->state != TRAP ? next : core->state;
