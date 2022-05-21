@@ -14,11 +14,13 @@ mmio_device_t ram_device = {
   .next         = NULL,
   .base_address = RAM_START,
   .size		= RAM_SIZE,
-  .perm         = READ|WRITE|EXEC,
+  .state        = READY,
+  .perm         = READ|WRITE,
   .init		= init_ram,
-  .read_single	= read_ram_single,
   .read         = read_ram,
-  .write	= write_ram
+  .read_single	= read_ram_single,
+  .write         = write_ram,
+  .write_single	= write_ram_single
 };
 
 bus_t main_bus = {
@@ -216,7 +218,7 @@ void core_join(emulator_t *emu, uint32_t core_num)
 void emulator_run(emulator_t *emu, const char *argv1)
 {
   fprintf(stderr, "initializing CPU\n");
-  emu->cpu = cpu_init(emu->bus, NUMCORES);
+  emu->cpu = cpu_init(emu->bus);
 
   fprintf(stderr, "Initializing %d cores with pc 0x%08x\n", NUMCORES, emu->elf->entry);
   for(size_t i=0; i < NUMCORES; i++) {

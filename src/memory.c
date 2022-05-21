@@ -30,85 +30,78 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 void init_ram(mmio_device_t *ram)
 {
+  ram->state = READY;
   // Nothing much to do here..
 }
 
-size_t read_ram(const struct _mmio_device_t *device, void *buf, const uint32_t offs, size_t size, const memory_access_width_t aw)
+size_t write_ram(struct _mmio_device_t *ram,
+		 const uint32_t offs,
+		 const void *buf,
+		 size_t count,
+		 const memory_access_width_t aw)
 {
+  mmu_t *mmu = (mmu_t *)ram->user;
+  ram->state = BUSY;
+
+  const size_t mult = aw == WORD ? 4 : (aw == HALFWORD ? 2 : 1);
+  const size_t ret = mmu_write_from(mmu, buf, offs, count*mult);
+
+  if(mmu->state == MMU_OK) {
+    ram->state = READY;
+    return ret;
+  }
+  ram->state = ERROR;
+  return 0;
+}
+
+size_t read_ram(struct _mmio_device_t *ram, const uint32_t offs, void *buf, size_t count, const memory_access_width_t aw)
+{
+  mmu_t *mmu = (mmu_t *)ram->user;
+  ram->state = BUSY;
+  const size_t mult = aw == WORD ? 4 : (aw == HALFWORD ? 2 : 1);
+  const size_t ret = mmu_read_into(mmu, buf, offs, count*mult);
+  if(mmu->state == MMU_OK) {
+    ram->state = READY;
+    return ret;
+  }
+  ram->state = ERROR;
+  return 0;
+}
+
+__attribute((__always_inline__))
+  uint32_t read_ram_single(mmio_device_t *ram,
+			   const vaddr_t offs,
+			   const memory_access_width_t aw)
+{
+  if(aw == WORD) {
+    uint32_t ret = 0;
+    read_ram(ram, offs, &ret, 1, aw);
+    return ret;
+  } else if(aw == HALFWORD) {
+    uint32_t ret = 0;
+    read_ram(ram, offs, &ret, 1, aw);
+    return ret;
+  } else if(aw == BYTE) {
+    uint8_t ret;
+    read_ram(ram, offs, &ret, 1, aw);
+    return ret;
+  }
   assert(false);
 }
 
 __attribute((__always_inline__))
-  uint32_t read_ram_single(const mmio_device_t *ram, const vaddr_t offs, const memory_access_width_t aw)
+  void write_ram_single(mmio_device_t *ram,
+			const vaddr_t offs,
+			const uint32_t value,
+			const memory_access_width_t aw)
 {
-  mmu_t *mmu = (mmu_t *)ram->user;
-
   if(aw == WORD) {
-    uint32_t ret = 0;
-    if(mmu_read_into(mmu, &ret, offs, sizeof(uint32_t)) == sizeof(uint32_t)) {
-#ifdef MEM_TRACE
-      fprintf(stderr, "memory::read_mmu::W 0x%08x => 0x%08x\n", offs, ret);
-#endif
-      return ret;
-    }
-    assert(mmu->state == MMU_OK);
+    write_ram(ram, offs, &value, 1, aw);
   } else if(aw == HALFWORD) {
-    uint16_t ret = 0;
-    if(mmu_read_into(mmu, &ret, offs, sizeof(uint16_t)) == sizeof(uint16_t)) {
-#ifdef MEM_TRACE
-            fprintf(stderr, "memory::read_mmu::H 0x%04x => 0x%04x\n", offs, ret);
-#endif
-      return ret;
-    }
-    assert(mmu->state == MMU_OK);
-  } else if(aw == BYTE) {
-    uint8_t ret = 0;
-    if(mmu_read_into(mmu, &ret, offs, sizeof(uint8_t)) == sizeof(uint8_t)) {
-#ifdef MEM_TRACE
-      fprintf(stderr, "memory::read_mmu::B 0x%02x => 0x%02x\n", offs, ret);
-#endif
-      return ret;
-    }
-    assert(mmu->state == MMU_OK);
-  }
-  assert(0==1);
-}
-
-__attribute((__always_inline__))
-void write_ram(mmio_device_t *ram,
-	       const vaddr_t offs,
-	       const uint32_t value,
-	       const memory_access_width_t aw)
-{
-  mmu_t *mmu = (mmu_t *)ram->user;
-  //  fprintf(stderr, "memory::write_ram: %08x = %08x (%u)\n", offs, value, aw);
-  if(aw == WORD) {
-    assert((offs & 3) == 0);
-    if(mmu_write_from(mmu, (void*)&value, offs, sizeof(uint32_t)) == sizeof(uint32_t)) {
-#ifdef MEM_TRACE
-      fprintf(stderr, "memory::write_mmu::W 0x%08x => 0x%08x\n", offs, value);
-#endif
-      return;
-    }
-    assert(mmu->state == MMU_OK);
-  } else if(aw == HALFWORD) {
-    assert((offs & 1) == 0);
-    uint16_t v16 = (uint32_t)value&0xffff;
-    if(mmu_write_from(mmu, (void*)&v16, offs, sizeof(uint16_t)) == sizeof(uint32_t)) {
-#ifdef MEM_TRACE
-      fprintf(stderr, "memory::write_mmu::H 0x%08x => 0x%08x\n", offs, value);
-#endif
-      return;
-    }      
-    assert(mmu->state == MMU_OK);
-  } else if(aw == BYTE) {
-    uint8_t v8 = (uint32_t)value&0xff;
-    if(mmu_write_from(mmu, (void*)&v8, offs, sizeof(uint8_t)) == sizeof(uint8_t)) {
-#ifdef MEM_TRACE
-      fprintf(stderr, "memory::write_mmu::B 0x%08x => 0x%08x\n", offs, value);
-#endif
-      return;
-    }      
-    assert(mmu->state == MMU_OK);
+    uint16_t val = (uint16_t)(value&0xffff);
+    write_ram(ram, offs, &val, 1, aw);
+  } else {
+    uint8_t val = (uint8_t)(value&0xff);
+    write_ram(ram, offs, &val, 1, aw);
   }
 }
