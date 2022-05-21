@@ -48,6 +48,7 @@ SYSCALL3(sys_write) {
 
 SYSCALL2(sys_fstat) {
   struct stat buf;
+  (void)emu;
   core->trap_regs[10] = fstat(arg0, &buf);
   
 #ifdef SYSCALL_TRACE
@@ -74,6 +75,7 @@ SYSCALL1(sys_close) {
 }
 
 SYSCALL3(sys_open) {
+  (void)emu;
   char buf[256];
   bus_read_string(core->bus, arg0, buf);
   if(core->bus->status != OK) {
@@ -90,6 +92,7 @@ SYSCALL3(sys_open) {
 }
 
 SYSCALL3(sys_lseek) {
+  (void)emu;
 #ifdef SYSCALL_TRACE
   fprintf(stderr, "syscall::lseek fd=%d whence=%d ", arg0, arg2);
 #endif
@@ -100,8 +103,8 @@ SYSCALL3(sys_lseek) {
 /**
  * Memory
  */
-SYSCALL2(sys_brk) {
-  // arg1 is either 0, or the offset wanted
+SYSCALL1(sys_brk) {
+  // arg0 is either 0, or the offset wanted
   vaddr_t vaddr = arg0;
   const uint32_t requested_increase =  arg0 == 0 ? 0 : ( (arg0 - vaddr) + 0x100) & 0xffffff00;
   if(requested_increase > 0) {
@@ -121,13 +124,16 @@ bool handle_syscall(emulator_t *emu, core_t *core,
 		    uint32_t n,
 		    uint32_t arg0, uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4)
 {
+  (void)arg3;
+  (void)arg4;
+  
    #ifdef SYSCALL_TRACE
   fprintf(stderr, "syscall::%d::(0x%08x,0x%08x,0x%08x)\n", n, arg0, arg1, arg2);
   #endif
   switch(n) {
   case SYS_exit:       fprintf(stderr, "syscall::exit()\n");       return false;
   case SYS_exit_group: fprintf(stderr, "syscall::exit_group()\n"); return false;
-  case SYS_brk: return sys_brk(emu, core, arg0, arg1);
+  case SYS_brk: return sys_brk(emu, core, arg0);
   case SYS_read: return sys_read(emu, core, arg0, arg1, arg2);
   case SYS_write: return sys_write(emu, core, arg0, arg1, arg2);
   case SYS_open:  return sys_open(emu, core, arg0, arg1, arg2);
