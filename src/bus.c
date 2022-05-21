@@ -58,7 +58,7 @@ static void bus_unlock_write(bus_t *bus)
 static mmio_device_t *bus_find_device(bus_t *bus, const size_t offs)
 {
   mmio_device_t *dev = bus->mmio_devices;
-  bus->status = OK;
+  bus->status = BUS_OK;
   while(dev != NULL) {
     if((dev->base_address <= offs) &&
        (dev->base_address + (dev->size)) > offs) {
@@ -66,7 +66,7 @@ static mmio_device_t *bus_find_device(bus_t *bus, const size_t offs)
     }
     dev = dev->next;
   }
-  bus->status = ADDRESS_NOT_FOUND;
+  bus->status = BUS_ADDRESS_NOT_FOUND;
   //  fprintf(stderr, "FATAL: bus_find_device %08zx\n", offs);
   //  assert(dev != NULL);
   return NULL;
@@ -100,7 +100,7 @@ size_t bus_read_string(bus_t *bus, const size_t offs, char *dst)
   do {
     c = bus_read_single(bus, offs+i, BYTE);
     dst[i++] = c;
-  } while(c != 0 && bus->status == OK);
+  } while(c != 0 && bus->status == BUS_OK);
 
   return i;
 }
@@ -108,8 +108,8 @@ size_t bus_read_string(bus_t *bus, const size_t offs, char *dst)
 uint32_t bus_read_single(bus_t *bus, const size_t offs, const memory_access_width_t aw)
 {
   bus_begin_read(bus);
-  const mmio_device_t *dev = bus_find_device(bus, offs);
-  if(bus->status != OK) {
+  mmio_device_t *dev = bus_find_device(bus, offs);
+  if(bus->status != BUS_OK) {
     bus_end_read(bus);
     return 0x0badc0de;
   }
@@ -118,55 +118,26 @@ uint32_t bus_read_single(bus_t *bus, const size_t offs, const memory_access_widt
   return r;
 }
 
-void bus_read_multiple(bus_t *bus, const size_t offs, void *dst, size_t count, const memory_access_width_t aw)
+size_t bus_read_multiple(bus_t *bus, const size_t offs, void *dst, size_t count, const memory_access_width_t aw)
 {
   bus_begin_read(bus);
-  const mmio_device_t *dev = bus_find_device(bus, offs);
-  if(bus->status != OK) {
+  mmio_device_t *dev = bus_find_device(bus, offs);
+  if(bus->status != BUS_OK) {
     bus_end_read(bus);
-    return;
+    return 0;
   }
-  size_t o = offs;
-
-#if PREFETCH_SIZE == 4  // fast path for instruction prefetch 4
-  if(aw == WORD && count == 4) {
-    uint32_t *ptr = (uint32_t *)dst;
-    ptr[0] = dev->read_single(dev, o, aw);
-    ptr[1] = dev->read_single(dev, o+4, aw);
-    ptr[2] = dev->read_single(dev, o+8, aw);
-    ptr[3] = dev->read_single(dev, o+12, aw);
-    bus_end_read(bus);
-    return;
- }
-#endif
-  
-  if(aw == WORD) {
-    uint32_t *ptr = (uint32_t *)dst;
-    for(size_t i=0; i < count; i++) {
-      ptr[i] = dev->read_single(dev, o, aw);
-      o += 4;
-    }
-  } else if(aw == HALFWORD) {
-    uint16_t *ptr = (uint16_t *)dst;
-    for(size_t i=0; i < count; i++) {
-      ptr[i] = dev->read_single(dev, o, aw);
-      o += 2;
-    }
-  } else  if(aw == BYTE) {
-    uint8_t *ptr = (uint8_t *)dst;
-    for(size_t i=0; i < count; i++) {
-      ptr[i] = dev->read_single(dev, o, aw);
-      o += 1;
-    }
+  if(dev->read(dev, offs, dst, count, aw) != count) {
+    bus->status = BUS_DEVICE_FAILURE;
   }
   bus_end_read(bus);
+  return count;
 }
 
 void bus_write_single(bus_t *bus, const size_t offs, const uint32_t value, const memory_access_width_t aw)
 {
   bus_begin_write(bus);
   mmio_device_t *dev = bus_find_device(bus, offs);
-  if(bus->status != OK) {
+  if(bus->status != BUS_OK) {
     bus_end_write(bus);
     return;
   }
@@ -175,44 +146,31 @@ void bus_write_single(bus_t *bus, const size_t offs, const uint32_t value, const
     assert((dev->perm & WRITE) == WRITE);
     return;
   }
-  dev->write(dev, offs, value, aw);
+  dev->write_single(dev, offs, value, aw);
   bus_end_write(bus);
 }
 
-void bus_write_multiple(bus_t *bus, const size_t offs, void *src, size_t count, const memory_access_width_t aw)
+size_t bus_write_multiple(bus_t *bus, const size_t offs, void *src, size_t count, const memory_access_width_t aw)
 {
   bus_begin_write(bus);
   mmio_device_t *dev = bus_find_device(bus, offs);
-  if(bus->status != OK) {
+  if(bus->status != BUS_OK || dev == NULL) {
     bus_end_write(bus);
-    return;
+    return 0;
   }
   if((dev->perm & WRITE) != WRITE) {
+    bus->status = BUS_ACCESS_DENIED;
     // TODO: Raise trap
     assert((dev->perm & WRITE) == WRITE);
-    return;
+    return 0;
   }
-  size_t o = offs;
 
-  if(aw == WORD) {
-    uint32_t *ptr = (uint32_t *)src;
-    for(size_t i=0; i < count; i++) {
-      dev->write(dev, o, ptr[i], aw);
-      o += 4;
-    }
-  } else if(aw == HALFWORD) {
-    uint16_t *ptr = (uint16_t *)src;
-    for(size_t i=0; i < count; i++) {
-      dev->write(dev, o, ptr[i], aw);
-      o += 2;
-    }
-  }
-  else if(aw == BYTE) {
-    uint8_t *ptr = (uint8_t *)src;
-    for(size_t i=0; i < count; i++) {
-      dev->write(dev, o, ptr[i], aw);
-      o += 1;
-    }
+  assert(dev->state == READY);
+  if(dev->write(dev, offs, src, count, aw) != count) {
+    //bus->status = dev->state;
+    bus->status = BUS_DEVICE_FAILURE;
+    return 0;
   }
   bus_end_write(bus);
+  return count;
 }

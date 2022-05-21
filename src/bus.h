@@ -26,10 +26,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "mmio.h"
 
 typedef enum _bus_status_t {
-  OK = 0,
-  READ_MISALIGNED   = 1,
-  WRITE_MISALIGNED  = 2,
-  ADDRESS_NOT_FOUND = 4,
+  BUS_OK = 0,
+  BUS_READ_MISALIGNED   = 1,
+  BUS_WRITE_MISALIGNED  = 2,
+  BUS_ADDRESS_NOT_FOUND = 4,
+  BUS_ACCESS_DENIED     = 5,
+  BUS_DEVICE_FAILURE    = 6
 } bus_status_t;
 
 typedef struct _bus_t {
@@ -42,9 +44,9 @@ void     bus_init(bus_t *);
 uint32_t bus_read_single(bus_t *, const size_t,  const memory_access_width_t);
 void     bus_write_single(bus_t *, const size_t, const uint32_t, const memory_access_width_t);
 
-void bus_read_multiple(bus_t *, const size_t, void *, size_t, const memory_access_width_t);
-void bus_write_multiple(bus_t *bus, const size_t offs, void *src, size_t count,
-                        const memory_access_width_t aw);
+size_t bus_read_multiple(bus_t *, const size_t, void *, size_t, const memory_access_width_t);
+size_t bus_write_multiple(bus_t *bus, const size_t offs, void *src, size_t count,
+			  const memory_access_width_t aw);
 
 size_t   bus_read_string(bus_t *bus, const size_t offs, char *dst);
 

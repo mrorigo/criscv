@@ -79,8 +79,8 @@ void fetch(core_t *core)
 {
   if(core->prefetch_cnt == 0) {
     bus_read_multiple(core->bus, core->pc, &core->instruction, PREFETCH_SIZE, WORD);
-    if(core->bus->status != OK) {
-      cause_trap(core, core->bus->status == READ_MISALIGNED ? INSTRUCTION_ADDR_MISALIGN : INSTRUCTION_ACCESS_FAULT);
+    if(core->bus->status != BUS_OK) {
+      cause_trap(core, core->bus->status == BUS_READ_MISALIGNED ? INSTRUCTION_ADDR_MISALIGN : INSTRUCTION_ACCESS_FAULT);
       return;
     }
     core->prefetch_cnt = PREFETCH_SIZE-1;
@@ -410,13 +410,13 @@ void memory_access(core_t *core)
     fprintf(stderr, "cpu::memory_access::readMem at 0x%08x (%hhu) => ", dec->memOffset, dec->memAccessWidth);
 #endif
     core->aluOut = bus_read_single(core->bus, dec->memOffset, dec->memAccessWidth);
-    if(core->bus->status != OK) {
+    if(core->bus->status != BUS_OK) {
 #ifdef MEM_TRACE
       fprintf(stderr, " ERROR\n");
 #endif
       switch(core->bus->status) {
-      case READ_MISALIGNED: cause_trap(core, LOAD_ADDR_MISALIGNED); return;
-      case ADDRESS_NOT_FOUND: cause_trap(core, LOAD_ACCESS_FAULT); return;
+      case BUS_READ_MISALIGNED: cause_trap(core, LOAD_ADDR_MISALIGNED); return;
+      case BUS_ADDRESS_NOT_FOUND: cause_trap(core, LOAD_ACCESS_FAULT); return;
       default: cause_trap(core, LOAD_PAGE_FAULT); return;
       }
     }
@@ -428,10 +428,10 @@ void memory_access(core_t *core)
     fprintf(stderr, "cpu::memory_access::writeMem at 0x%08x (%hhu): 0x%08x\n", dec->memOffset, dec->memAccessWidth, core->aluOut);
 #endif
     bus_write_single(core->bus, dec->memOffset, core->aluOut, dec->memAccessWidth);
-    if(core->bus->status != OK) {
+    if(core->bus->status != BUS_OK) {
       switch(core->bus->status) {
-      case WRITE_MISALIGNED: cause_trap(core, STORE_ADDR_MISALIGNED); return;
-      case ADDRESS_NOT_FOUND: cause_trap(core, STORE_ACCESS_FAULT); return;
+      case BUS_WRITE_MISALIGNED: cause_trap(core, STORE_ADDR_MISALIGNED); return;
+      case BUS_ADDRESS_NOT_FOUND: cause_trap(core, STORE_ACCESS_FAULT); return;
       default: cause_trap(core, STORE_PAGE_FAULT); return;
       }
     }

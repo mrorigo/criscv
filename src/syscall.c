@@ -78,7 +78,7 @@ SYSCALL3(sys_open) {
   (void)emu;
   char buf[256];
   bus_read_string(core->bus, arg0, buf);
-  if(core->bus->status != OK) {
+  if(core->bus->status != BUS_OK) {
     return false;
   }
 #ifdef SYSCALL_TRACE
