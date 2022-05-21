@@ -29,7 +29,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "cpu.h"
 #include "memory.h"
 
-RV32I_cpu_t *cpu_init(bus_t *bus, uint32_t num_cores)
+RV32I_cpu_t *cpu_init(bus_t *bus)
 {
   RV32I_cpu_t *cpu = malloc(sizeof(RV32I_cpu_t));
   memset(cpu, 0, sizeof(RV32I_cpu_t));
@@ -95,7 +95,6 @@ void fetch(core_t *core)
 #endif
 }
 
-// We allow writes to ZERO, because REG_R handles this case (faster)
 #define REG_W(x, y) (core->registers[x] = (x == 0 ? 0 : y))
 #define REG_R(x) (x == 0 ? 0 : core->registers[x])
 
@@ -128,6 +127,9 @@ void decode(core_t *core)
 #endif
 
   switch(dec->optype) {
+  case C:
+    // TODO
+    break;
   case R:
     dec->funct7 = (i >> 25);
     break;
@@ -474,6 +476,7 @@ void trap(core_t *core)
   fprintf(stderr, "cpu::cycle: TRAP @ 0x%08x trap_state=0x%2d cause=0x%02x\n", core->pc, core->trap_state, core->csr.mcause);
 #endif
   switch(core->trap_state) {
+  case NONE: assert(false); break;
   case ENTER:
     memcpy(core->trap_regs, core->registers, NUMREGS*sizeof(uint32_t));
     core->prefetch_cnt = 0;  // flush prefetch cache, since pc changes

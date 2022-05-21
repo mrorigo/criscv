@@ -329,7 +329,7 @@ typedef struct __attribute((packed)) _RV32I_t {
   bus_t       *bus;
 } RV32I_cpu_t;
 
-RV32I_cpu_t	*cpu_init(bus_t *, uint32_t);
+RV32I_cpu_t	*cpu_init(bus_t *);
 core_t *	 core_init(RV32I_cpu_t *, uint32_t, uint32_t);
 void		 core_cycle(core_t *);
 void             core_dumpregs(core_t *);
