@@ -143,17 +143,13 @@ int mmu_write_from(mmu_t *mmu, void *src, const vaddr_t vaddr, const size_t size
     mmu->state = ACCESS_DENIED;
     return -1;
   }
-  if(vaddr == 0x0001edc4) {
-    mmu->state = MMU_OK;
-  }
   mmu->state = MMU_OK;
   memcpy((uint8_t*)mmu->data + (vaddr - mmu->base), src, size_in_bytes);
 
   // Update perms
-  //  mmu_setperm(mmu, vaddr, size_in_bytes, MPERM_READ|(mmu->perm[vaddr-mmu->base] & MPERM_EXEC));
   for(size_t i = vaddr-mmu->base; i < vaddr-mmu->base+size_in_bytes; i++) {
     if((mmu->perm[i] & MPERM_RAW) == MPERM_RAW) {
-      mmu->perm[i] |= MPERM_READ;
+      mmu->perm[i] = MPERM_READ|MPERM_WRITE|(mmu->perm[i]&MPERM_EXEC);
     }
   }
 
@@ -174,10 +170,6 @@ int mmu_read_into(mmu_t *mmu,
   if(vaddr < mmu->base || vaddr + size_in_bytes > mmu->base + mmu->size) {
     mmu->state = WRITE_PAGE_FAULT;
     return -1;
-  }
-
-  if(vaddr == 0x0001edc4) {
-    mmu->state = MMU_OK;
   }
 
   if(mmu_check_access(mmu, vaddr, size_in_bytes, MPERM_READ)) {
