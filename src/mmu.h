@@ -37,11 +37,11 @@ bool     mmu_check_access(const mmu_t *,
 			  const size_t,
 			  const mperm_t);
 mmu_t	*mmu_init(const vaddr_t, const size_t);
-bool     mmu_add_memory(mmu_t *mmu, const vaddr_t addr, size_t size, mperm_t perm);
+bool     mmu_add_memory(mmu_t *mmu, const vaddr_t addr, const size_t size, const mperm_t perm);
 vaddr_t	 mmu_allocate(mmu_t *, const size_t, mperm_t);
 vaddr_t	 mmu_allocate_raw(mmu_t *, const size_t);
-int	 mmu_write_from(mmu_t *, void *, vaddr_t, size_t);
-int	 mmu_read_into(mmu_t *, void *, vaddr_t, size_t);
+size_t	 mmu_write_from(mmu_t *, const void *, const vaddr_t, const size_t);
+size_t	 mmu_read_into(mmu_t *, void *, vaddr_t, size_t);
 void	 mmu_setperm(mmu_t *, const vaddr_t, const size_t, const mperm_t);
 
 #endif

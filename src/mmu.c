@@ -57,7 +57,7 @@ mmu_t *mmu_init(const vaddr_t base, const size_t size)
   return mmu;
 }
 
-bool mmu_add_memory(mmu_t *mmu, const vaddr_t addr, size_t size, mperm_t perm)
+bool mmu_add_memory(mmu_t *mmu, const vaddr_t addr, const size_t size, const mperm_t perm)
 {
   if(addr < mmu->base) {
     assert(0 && "can not extend memory segment");
@@ -131,17 +131,17 @@ bool mmu_check_access(const mmu_t *mmu,
   return true;
 }
 
-int mmu_write_from(mmu_t *mmu, void *src, const vaddr_t vaddr, const size_t size_in_bytes)
+size_t mmu_write_from(mmu_t *mmu, const void *src, const vaddr_t vaddr, const size_t size_in_bytes)
 {
   if(vaddr < mmu->base || vaddr + size_in_bytes > mmu->base + mmu->size) {
     mmu->state = READ_PAGE_FAULT;
-    return -1;
+    return 0;
   }
   assert(vaddr >= mmu->base);
   assert(vaddr <= mmu->base + mmu->size );
   if(!mmu_check_access(mmu, vaddr, size_in_bytes, MPERM_WRITE)) {
     mmu->state = ACCESS_DENIED;
-    return -1;
+    return 0;
   }
   mmu->state = MMU_OK;
   memcpy((uint8_t*)mmu->data + (vaddr - mmu->base), src, size_in_bytes);
@@ -162,14 +162,14 @@ int mmu_write_from(mmu_t *mmu, void *src, const vaddr_t vaddr, const size_t size
   return size_in_bytes;
 }
 
-int mmu_read_into(mmu_t *mmu,
-		  void *dst,
-		  vaddr_t vaddr,
-		  size_t size_in_bytes)
+size_t mmu_read_into(mmu_t *mmu,
+		     void *dst,
+		     vaddr_t vaddr,
+		     size_t size_in_bytes)
 {
   if(vaddr < mmu->base || vaddr + size_in_bytes > mmu->base + mmu->size) {
     mmu->state = WRITE_PAGE_FAULT;
-    return -1;
+    return 0;
   }
 
   if(mmu_check_access(mmu, vaddr, size_in_bytes, MPERM_READ)) {
@@ -178,7 +178,7 @@ int mmu_read_into(mmu_t *mmu,
   } else {
     fprintf(stderr, "mmu::read_into from 0x%08x, size %zu, access denied!\n", vaddr, size_in_bytes);
     mmu->state = ACCESS_DENIED;
-    return -1;
+    return 0;
   }
   return size_in_bytes;
 }
