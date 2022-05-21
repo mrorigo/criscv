@@ -13,9 +13,9 @@ typedef enum _mperm_t {
 
 typedef enum _mmu_state_t {
   MMU_OK           = 0,
-  READ_PAGE_FAULT  = 1<<0,
-  WRITE_PAGE_FAULT = 1<<1,
-  ACCESS_DENIED    = 1<<2
+  READ_PAGE_FAULT  = 1,
+  WRITE_PAGE_FAULT = 2,
+  ACCESS_DENIED    = 3
 } mmu_state_t;
 
 typedef uint32_t vaddr_t;
