@@ -32,10 +32,12 @@ Elf32 *elf_load (const uint8_t *elf_start, mmu_t *mmu)
 		     (void *)(elf_start + phdr[i].p_offset),
 		     phdr[i].p_vaddr,
 		     phdr[i].p_filesz);
-      Elf32_Word f = phdr[i].p_flags;
-      mperm_t perm = (f&4) != 0 ? MPERM_READ : 0;
-      perm |= ((f&2) != 0 ? MPERM_WRITE : 0);
-      perm |= ((f&1) != 0 ? MPERM_EXEC : 0);
+
+      const Elf32_Word f = phdr[i].p_flags;
+      const mperm_t perm = ((f&4) != 0 ? MPERM_READ : 0) | 
+	((f&2) != 0 ? MPERM_WRITE : 0) |
+	((f&1) != 0 ? MPERM_EXEC : 0) |
+	((f&4) != 0 && (f&2) == 0 ? MPERM_RAW : 0);
       mmu_setperm(mmu, phdr[i].p_vaddr, phdr[i].p_filesz, perm);
     }
   }
