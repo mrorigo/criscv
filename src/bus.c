@@ -67,8 +67,6 @@ static mmio_device_t *bus_find_device(bus_t *bus, const size_t offs)
     dev = dev->next;
   }
   bus->status = BUS_ADDRESS_NOT_FOUND;
-  //  fprintf(stderr, "FATAL: bus_find_device %08zx\n", offs);
-  //  assert(dev != NULL);
   return NULL;
 }
 
@@ -123,11 +121,20 @@ size_t bus_read_multiple(bus_t *bus, const size_t offs, void *dst, size_t count,
   bus_begin_read(bus);
   mmio_device_t *dev = bus_find_device(bus, offs);
   if(bus->status != BUS_OK) {
+    #ifdef BUS_TRACE
+    fprintf(stderr, "bus:read_multiple:bus_find_device failed\n");
+    #endif
     bus_end_read(bus);
     return 0;
   }
+  bus->status = BUS_OK;
   if(dev->read(dev, offs, dst, count, aw) != count) {
+    #ifdef BUS_TRACE
+    fprintf(stderr, "bus:read_multiple:dev_read failed: %d\n", dev->state);
+    #endif
     bus->status = BUS_DEVICE_FAILURE;
+    bus_end_read(bus);
+    return 0;
   }
   bus_end_read(bus);
   return count;
@@ -171,6 +178,7 @@ size_t bus_write_multiple(bus_t *bus, const size_t offs, void *src, size_t count
     bus->status = BUS_DEVICE_FAILURE;
     return 0;
   }
+  bus->status = BUS_OK;
   bus_end_write(bus);
   return count;
 }
