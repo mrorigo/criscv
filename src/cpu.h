@@ -291,6 +291,13 @@ typedef enum __attribute((packed)) _trap_state_t {
 
 struct _core_thread_args_t;
 
+typedef enum _priv_mode_t {
+  PMODE_MACHINE,
+  PMODE_SUPERVISOR,
+  PMODE_USER,
+  PMODE_DEBUG
+} priv_mode_t;
+
 typedef struct __attribute((packed)) _core_t {
   core_state_t state;
   
@@ -302,22 +309,22 @@ typedef struct __attribute((packed)) _core_t {
   uint32_t    aluOut;
 
   uint32_t    registers[NUMREGS];
+  uint64_t     cycle;
 
   bus_t       *bus;
-  csr_t        csr;
+  csr_t        csr __attribute__((aligned));
 
   uint32_t     trap_pc;
   uint32_t     trap_regs[NUMREGS];
 
   uint8_t      prefetch_cnt:4; // for alignment/packing purposes
   uint8_t      id:4;
+  priv_mode_t  priv_mode:4;
+  trap_state_t trap_state:4;
   bool         halted:1;
-  trap_state_t trap_state;
-  uint64_t     cycle;
 
   bool       (*trap_handler )(struct _core_thread_args_t *args);
 } core_t;
-
 
 typedef struct _core_thread_args_t {
   struct _emulator_t *emulator;

@@ -2,6 +2,7 @@
 #define __CSR_H__
 
 #include <sys/types.h>
+#include "mmio.h"
 
 typedef struct _trap_args_t {
   struct _core_t *core;
@@ -18,19 +19,21 @@ typedef enum _csr_instruction_type_t {
 } csr_instruction_type_t;
 
 typedef enum _csr_mmode_t {
+  mstatus   =	0x300,
   misa      =	0x301,
+  mie       =	0x304,
+  mtvec     =	0x305,
+  mscratch  =	0x340,
+  mepc      =	0x341,
+  mcause    =	0x342,
+  mtval     =	0x343,
+  mip       =	0x344,
   mvendorid =	0xF11,
   marchid   =	0xF12,
   mimpid    =	0xF13,
   mhartid   =	0xF14,
-  mstatus   =	0x300,
-  mtvec     =	0x305,
-  mie       =	0x304,
-  mip       =	0x344,
-  mcause    =	0x342,
-  mepc      =	0x341,
-  mscratch  =	0x340,
-  mtval     =	0x343,
+
+  csr_mmode_max = 0x1000
 } csr_mmode_t;
 
 #define TRAP_CAUSE_INTERRUPT (1<<5)
@@ -64,22 +67,12 @@ typedef enum _csr_access_mode_t {
 } csr_access_mode_t;
 
 typedef struct _csr_t {
-  uint32_t	misa;
-  uint32_t	mvendorid;
-  uint32_t	marchid;
-  uint32_t	mimpid;
-  uint32_t	mhartid;
-  uint32_t	mstatus;
-  uint32_t	mtvec;
-  uint32_t	mie;
-  uint32_t	mip;
-  trap_cause_t	mcause;
-  uint32_t	mepc;
-  uint32_t	mscratch;
-  uint32_t	mtval;
+  uint32_t      state[csr_mmode_max];
 } csr_t;
 
 void csr_init(csr_t *csr);
-void csr_cycle(csr_t *csr);
+uint32_t csr_read_write(csr_t *csr, uint32_t addr, uint32_t val);
+uint32_t csr_read_set(csr_t *csr, uint32_t addr, uint32_t mask);
+uint32_t csr_read_clear(csr_t *csr, uint32_t addr);
 
 #endif

@@ -45,13 +45,14 @@ core_t *core_init(RV32I_cpu_t *cpu, uint32_t core_num, uint32_t initial_pc)
   core_t *core = &cpu->cores[core_num];
   assert(core);
 
-  core->id     = core_num;
-  core->pc     = initial_pc;
-  core->bus    = cpu->bus;
-  core->cycle  = 0;
-  core->state  = FETCH;
+  core->id	     = core_num;
+  core->pc	     = initial_pc;
+  core->bus	     = cpu->bus;
+  core->cycle	     = 0;
+  core->state	     = FETCH;
+  core->priv_mode    = PMODE_MACHINE;
   core->prefetch_cnt = 0;
-  core->halted = false;
+  core->halted	     = false;
   for(size_t i=0; i < NUMREGS; i++) {
     core->registers[i] = 0;
   }
@@ -60,7 +61,7 @@ core_t *core_init(RV32I_cpu_t *cpu, uint32_t core_num, uint32_t initial_pc)
 
 void core_dumpregs(core_t *core)
 {
-  fprintf(stderr, "pc=0x%08x  mepc=0x%08x\n", core->pc, core->csr.mepc);
+  fprintf(stderr, "pc=0x%08x  priv_mode=%d\n", core->pc, core->priv_mode);
   for(size_t i = 0 ; i < NUMREGS; i++) {
     fprintf(stderr, "X%02zu: 0x%08x ", i, core->registers[i]);
     if(i % 4 == 3) {
@@ -72,14 +73,13 @@ void core_dumpregs(core_t *core)
 void cause_trap(core_t *core, trap_cause_t cause) {
   core->state = TRAP;
   core->trap_state = ENTER;
-  core->csr.mcause = cause;
+  (void)csr_read_write(&core->csr, mcause, cause);
 }
 
 void fetch(core_t *core)
 {
   if(core->prefetch_cnt == 0) {
-    bus_read_multiple(core->bus, core->pc, &core->instruction, PREFETCH_SIZE, WORD);
-    if(core->bus->status != BUS_OK) {
+    if(bus_read_multiple(core->bus, core->pc, &core->instruction, PREFETCH_SIZE, WORD) != PREFETCH_SIZE) {
       cause_trap(core, core->bus->status == BUS_READ_MISALIGNED ? INSTRUCTION_ADDR_MISALIGN : INSTRUCTION_ACCESS_FAULT);
       return;
     }
@@ -98,7 +98,6 @@ void fetch(core_t *core)
 
 void decode(core_t *core)
 {
-  //  assert(core->state == DECODE);
   register uint32_t i = core->instruction;
   register instr_t *dec = &core->decoded;
 
@@ -176,8 +175,6 @@ void decode(core_t *core)
 
   case Unknown:
     fprintf(stderr, "cpu:%d:decode i=0x%08x: unknown opcode=0x%08x optype=%x, pc=0x%08x\n", core->id, i, dec->opcode, dec->optype, core->pc);
-
-    // TODO: Illegal instruction trap
     cause_trap(core, ILLEGAL_INSTRUCTION);
     break;
   }
@@ -211,10 +208,7 @@ void execute(core_t *core)
     case OP_OR:   core->aluOut = dec->rs1v | dec->rs2v;                            break;
     case OP_AND:  core->aluOut = dec->rs1v & dec->rs2v;                            break;
     default:
-      
       cause_trap(core, ILLEGAL_INSTRUCTION);
-
-      assert(false);
       break;
     }
     break;
@@ -261,15 +255,9 @@ void execute(core_t *core)
       dec->memAccessWidth = WORD;
       core->aluOut = dec->rs2v & 0xffffffff;
       dec->readMem = true;
-      #ifdef CPU_TRACE
-      fprintf(stderr, "cpu::execute OP_LW imm12/se: 0x%08x/0x%08x  memOffset; 0x%08x\n", dec->imm12, se_imm12, dec->memOffset);
-      #endif
       break;
     case OP_ADDI: {
       core->aluOut = add_wrap((int32_t)dec->rs1v, (int32_t)se_imm12);
-      #ifdef CPU_TRACE
-      fprintf(stderr, "cpu::execute ADDI  imm12/se: 0x%08x/0x%08x => 0x%08x\n", dec->imm12, se_imm12, core->aluOut);
-      #endif
       break;
     }
     case OP_SLTI:  core->aluOut = (int32_t)dec->rs1v < (int32_t)se_imm12 ? 1 : 0;  break;
@@ -388,8 +376,7 @@ void execute(core_t *core)
       break;
     }
     default:
-      fprintf(stderr, "opcode: 0x%08x\n", dec->opcode);
-      assert(dec->optype != C);
+      cause_trap(core, ILLEGAL_INSTRUCTION);
       break;
     }
     break;
@@ -415,9 +402,9 @@ void memory_access(core_t *core)
       fprintf(stderr, " ERROR\n");
 #endif
       switch(core->bus->status) {
-      case BUS_READ_MISALIGNED: cause_trap(core, LOAD_ADDR_MISALIGNED); return;
-      case BUS_ADDRESS_NOT_FOUND: cause_trap(core, LOAD_ACCESS_FAULT); return;
-      default: cause_trap(core, LOAD_PAGE_FAULT); return;
+      case BUS_READ_MISALIGNED:		cause_trap(core, LOAD_ADDR_MISALIGNED); return;
+      case BUS_ADDRESS_NOT_FOUND:	cause_trap(core, LOAD_ACCESS_FAULT); return;
+      default:				cause_trap(core, LOAD_PAGE_FAULT); return;
       }
     }
 #ifdef MEM_TRACE
@@ -430,9 +417,9 @@ void memory_access(core_t *core)
     bus_write_single(core->bus, dec->memOffset, core->aluOut, dec->memAccessWidth);
     if(core->bus->status != BUS_OK) {
       switch(core->bus->status) {
-      case BUS_WRITE_MISALIGNED: cause_trap(core, STORE_ADDR_MISALIGNED); return;
-      case BUS_ADDRESS_NOT_FOUND: cause_trap(core, STORE_ACCESS_FAULT); return;
-      default: cause_trap(core, STORE_PAGE_FAULT); return;
+      case BUS_WRITE_MISALIGNED:	cause_trap(core, STORE_ADDR_MISALIGNED); return;
+      case BUS_ADDRESS_NOT_FOUND:	cause_trap(core, STORE_ACCESS_FAULT); return;
+      default:				cause_trap(core, STORE_PAGE_FAULT); return;
       }
     }
   }
@@ -470,9 +457,9 @@ void trap(core_t *core)
   case NONE: assert(false); break;
   case ENTER:
     memcpy(core->trap_regs, core->registers, NUMREGS*sizeof(uint32_t));
-    core->prefetch_cnt = 0;  // flush prefetch cache, since pc changes
+    core->prefetch_cnt = 0;  // flush prefetch cache, since pc changed
     core->trap_pc = core->pc;
-    core->pc = core->csr.mepc = core->pc;
+    (void)csr_read_write(&core->csr, mepc, core->pc);
     core->state = TRAP;
     core->trap_state = HANDLE;
     break;
@@ -484,12 +471,11 @@ void trap(core_t *core)
   case EXIT:
     memcpy(core->registers, core->trap_regs, NUMREGS*sizeof(uint32_t));
 
-    core->pc = core->csr.mepc + 4;
+    core->pc = csr_read_clear(&core->csr, mepc) + 4;
 
     core->trap_state = NONE;
     core->state = FETCH;
-    // flush prefetch cache (might not be necessary)
-    core->prefetch_cnt = 0;
+    core->prefetch_cnt = 0; // flush prefetch cache, since pc changed
     break;
   }
 }
