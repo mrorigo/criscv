@@ -8,10 +8,11 @@
 #include "memory.h"
 #include "elf32.h"
 #include "syscall.h"
-
+#include "video.h"
+#include "csr.h"
 
 mmio_device_t ram_device = {
-  .next         = NULL,
+  .next         = &csr_mmio_device,
   .base_address = RAM_START,
   .size		= RAM_SIZE,
   .state        = READY,
@@ -78,11 +79,14 @@ emulator_t *emulator_init()
   //  vaddr_t isr_addr = mmu_allocate_raw(emu->mmu, sizeof(vaddr_t)*64);
   //  assert(isr_addr == RAM_START);
 
-
   bus_init(emu->bus);
   //  bus_write_single(emu->bus, isr_addr,   0x00001337, WORD);
-  
-  fprintf(stderr, "initializing main bus\n");
+
+  if(!video_init(&emu->video, emu->mmu)) {
+    free(emu);
+    return NULL;
+  }
+
   return emu;
 }
 
@@ -123,8 +127,8 @@ bool trap_handler(core_thread_args_t *args)
   emulator_t *emu = args->emulator;
 
   //  fprintf(stderr, "emu::trap_handler::TRAP at 0x%08x: cause=0x%02x \n", core->csr.mepc,  core->csr.mcause);
-  trap_cause_t cause = csr_read_set(&core->csr, mcause, 0);
-  vaddr_t trap_pc = csr_read_set(&core->csr, mepc, 0);
+  trap_cause_t cause = csr_read_clear32(&core->csr, mcause, 0);
+  vaddr_t trap_pc = csr_read_clear32(&core->csr, mepc, 0);
   switch(cause) {
   case ENV_CALL_UMODE:
     return handle_umode_call(emu, core);

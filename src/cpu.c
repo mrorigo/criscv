@@ -73,7 +73,7 @@ void core_dumpregs(core_t *core)
 void cause_trap(core_t *core, trap_cause_t cause) {
   core->state = TRAP;
   core->trap_state = ENTER;
-  (void)csr_read_write(&core->csr, mcause, cause);
+  (void)csr_read_write32(&core->csr, mcause, cause);
 }
 
 void fetch(core_t *core)
@@ -81,6 +81,7 @@ void fetch(core_t *core)
   if(core->prefetch_cnt == 0) {
     if(bus_read_multiple(core->bus, core->pc, &core->instruction, PREFETCH_SIZE, WORD) != PREFETCH_SIZE) {
       cause_trap(core, core->bus->status == BUS_READ_MISALIGNED ? INSTRUCTION_ADDR_MISALIGN : INSTRUCTION_ACCESS_FAULT);
+      assert(false);
       return;
     }
     core->prefetch_cnt = PREFETCH_SIZE-1;
@@ -451,7 +452,8 @@ void writeback(core_t *core)
 void trap(core_t *core)
 {
 #ifdef CPU_TRACE
-  fprintf(stderr, "cpu::cycle: TRAP @ 0x%08x trap_state=0x%2d cause=0x%02x\n", core->pc, core->trap_state, core->csr.mcause);
+  uint64_t cause = csr_read_clear32(&core->csr, mcause, 0);
+  fprintf(stderr, "cpu::cycle: TRAP @ 0x%08x trap_state=0x%2d cause=0x%02llx\n", core->pc, core->trap_state, cause);
 #endif
   switch(core->trap_state) {
   case NONE: assert(false); break;
@@ -459,7 +461,7 @@ void trap(core_t *core)
     memcpy(core->trap_regs, core->registers, NUMREGS*sizeof(uint32_t));
     core->prefetch_cnt = 0;  // flush prefetch cache, since pc changed
     core->trap_pc = core->pc;
-    (void)csr_read_write(&core->csr, mepc, core->pc);
+    (void)csr_read_write32(&core->csr, mepc, core->pc);
     core->state = TRAP;
     core->trap_state = HANDLE;
     break;
@@ -469,9 +471,10 @@ void trap(core_t *core)
     break;
 
   case EXIT:
+    // TODO: Unsure if all registers should be restored..
     memcpy(core->registers, core->trap_regs, NUMREGS*sizeof(uint32_t));
 
-    core->pc = csr_read_clear(&core->csr, mepc) + 4;
+    core->pc = csr_read_clear32(&core->csr, mepc, 0) + 4;
 
     core->trap_state = NONE;
     core->state = FETCH;
@@ -487,7 +490,6 @@ void trap(core_t *core)
 
 void core_cycle(core_t *core)
 {
-  //  fprintf(stderr, "core %d: pc=0x%08x\n", core->id, core->pc);
 
   switch(core->state) {
   case TRAP:      _stage(trap, FETCH);               break;
@@ -497,6 +499,14 @@ void core_cycle(core_t *core)
   case MEMORY:    _stage(memory_access, WRITEBACK);  break;
   case WRITEBACK: _stage(writeback, FETCH);          break;
   }
+
+  //  (void)csr_read_write32(&core->csr, mcycle, core->cycle&0xffffffff);
+  //  (void)csr_read_write32(&core->csr, mcycleh, core->cycle>>32);
+
+  //  struct timespec spec;
+  //  clock_gettime(CLOCK_REALTIME, &spec);
+  //  uint64_t time = spec.tv_sec * (CLOCKS_PER_SEC) + spec.tv_nsec;
+  //  csr_read_write64(&core->csr, mtime, time);
 
 }
 #undef _stage

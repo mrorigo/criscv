@@ -40,6 +40,15 @@ typedef enum __attribute__((packed)) _optype_t {
   C = 7    // System (CSR*)
 } optype_t;
 
+typedef enum _csr_instruction_type_t {
+  CSRRW = 0b001,
+  CSRRS = 0b010,
+  CSRRC = 0b011,
+  CSRRWI = 0b101,
+  CSRRSI = 0b110,
+  CSRRCI = 0b111
+} csr_instruction_type_t;
+
 static const optype_t decode_type_table[128] = {
   /*0000000 */ Unknown,
   /*0000001 */ Unknown,
