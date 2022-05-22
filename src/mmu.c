@@ -88,10 +88,22 @@ bool mmu_add_memory(mmu_t *mmu, const vaddr_t addr, const size_t size, const mpe
     const size_t new_size = (addr+size) - mmu->base;
     void * new_data = realloc(mmu->data, new_size);
     if(new_data == NULL) {
-      assert(new_data);
       return false;
     }
     mmu->data = new_data;
+
+    void * new_perm = realloc(mmu->perm, new_size);
+    if(new_perm == NULL) {
+      return false;
+    }
+    mmu->perm = new_perm;
+
+    void * new_dirty = realloc(mmu->dirty, new_size);
+    if(new_dirty == NULL) {
+      return false;
+    }
+    mmu->dirty = new_dirty;
+
     mmu->size = new_size;
   } else {
     // extend the curr_vaddr beyond addr+size
