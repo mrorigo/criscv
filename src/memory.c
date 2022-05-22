@@ -25,13 +25,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <assert.h>
 #include "mmu.h"
 #include "memory.h"
-#include "mmio.h"
+#include "bus.h"
 #include "config.h"
 
 void init_ram(mmio_device_t *ram)
 {
   ram->state = READY;
-  // Nothing much to do here..
 }
 
 size_t write_ram(struct _mmio_device_t *ram,
@@ -60,9 +59,9 @@ size_t read_ram(struct _mmio_device_t *ram, const uint32_t offs, void *buf, size
   ram->state = BUSY;
   const size_t mult = aw == WORD ? 4 : (aw == HALFWORD ? 2 : 1);
   const size_t ret = mmu_read_into(mmu, buf, offs, count*mult);
-  if(mmu->state == MMU_OK) {
+  if(mmu->state == MMU_OK && ret == count*mult) {
     ram->state = READY;
-    return ret;
+    return count;
   }
   ram->state = ERROR;
   return 0;
