@@ -123,33 +123,37 @@ bool trap_handler(core_thread_args_t *args)
   emulator_t *emu = args->emulator;
 
   //  fprintf(stderr, "emu::trap_handler::TRAP at 0x%08x: cause=0x%02x \n", core->csr.mepc,  core->csr.mcause);
-
-  switch(core->csr.mcause) {
+  trap_cause_t cause = csr_read_set(&core->csr, mcause, 0);
+  vaddr_t trap_pc = csr_read_set(&core->csr, mepc, 0);
+  switch(cause) {
   case ENV_CALL_UMODE:
     return handle_umode_call(emu, core);
 
   case ILLEGAL_INSTRUCTION:
-    fprintf(stderr, "emu::trap_handler::ILLEGAL_INSTRUCTION @ 0x%08x \n", core->csr.mepc);
+    fprintf(stderr, "emu::trap_handler::ILLEGAL_INSTRUCTION @ 0x%08x \n", trap_pc);
     return false;
-    //  case LOAD_ADDR_MISALIGNED:
-    //  case STORE_ADDR_MISALIGNED:
-    //    return false;
+  case LOAD_ADDR_MISALIGNED:
+    fprintf(stderr, "emu::trap_handler::LOAD_ADDR_MISALIGNED @ 0x%08x \n", trap_pc);
+    return false;
+  case STORE_ADDR_MISALIGNED:
+    fprintf(stderr, "emu::trap_handler::STORE_ADDR_MISALIGNED @ 0x%08x \n", trap_pc);
+    return false;
   case INSTRUCTION_ADDR_MISALIGN:
-    fprintf(stderr, "emu::trap_handler::INSTRUCTION_ADDR_MISALIGN @ 0x%08x \n", core->csr.mepc);
+    fprintf(stderr, "emu::trap_handler::INSTRUCTION_ADDR_MISALIGN @ 0x%08x \n", trap_pc);
     return false;
   case INSTRUCTION_ACCESS_FAULT:
-    fprintf(stderr, "emu::trap_handler::INSTRUCTION_ACCESS_FAULT @ 0x%08x \n", core->csr.mepc);
+    fprintf(stderr, "emu::trap_handler::INSTRUCTION_ACCESS_FAULT @ 0x%08x \n", trap_pc);
     return false;
   case LOAD_ACCESS_FAULT:
-    fprintf(stderr, "emu::trap_handler::LOAD_ACCESS_FAULT @ 0x%08x \n", core->csr.mepc);
+    fprintf(stderr, "emu::trap_handler::LOAD_ACCESS_FAULT @ 0x%08x \n", trap_pc);
     return false;
 
   case STORE_ACCESS_FAULT:
-    fprintf(stderr, "emu::trap_handler::STORE_ACCESS_FAULT @ 0x%08x \n", core->csr.mepc);
+    fprintf(stderr, "emu::trap_handler::STORE_ACCESS_FAULT @ 0x%08x \n", trap_pc);
     return false;
 
   default:
-    fprintf(stderr, "emu::trap_handler::UNKNOWN TRAP @ 0x%08x: cause=0x%02x \n", core->csr.mepc,  core->csr.mcause);
+    fprintf(stderr, "emu::trap_handler::UNKNOWN TRAP @ 0x%08x: cause=0x%02x \n", trap_pc,  cause);
     return false;
     
   }
